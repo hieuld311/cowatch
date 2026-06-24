@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="#000000">
+
+    <LinearLayout
+        android:id="@+id/broadcastTopBar"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingStart="24dp"
+        android:paddingEnd="36dp"
+        android:background="#101827">
+
+        <TextView
+            android:id="@+id/tvPageTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Movies / Browse"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <ImageView
+            android:id="@+id/ivBroadcast"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="24dp"
+            android:contentDescription="Broadcast"
+            android:src="@android:drawable/ic_menu_share"
+            app:tint="#FFFFFF" />
+
+        <FrameLayout
+            android:layout_width="110dp"
+            android:layout_height="64dp"
+            android:foregroundGravity="center">
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/switchBroadcast"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text=""
+                android:textOn=""
+                android:textOff=""
+                android:scaleX="1.5"
+                android:scaleY="1.5"
+                app:showText="false" />
+
+        </FrameLayout>
+
+    </LinearLayout>
+
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/playerView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        app:use_controller="true" />
+
+</LinearLayout>

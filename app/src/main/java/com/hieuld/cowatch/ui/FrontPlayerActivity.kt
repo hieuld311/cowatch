@@ -84,7 +84,7 @@ class FrontPlayerActivity : AppCompatActivity(), ShareDialogFragment.Callback {
         player.setMediaItem(MediaItem.fromUri(mediaUri))
         player.prepare()
         player.seekTo(state.positionMs)
-        player.playWhenReady = state.isPlaying && !state.hasSharedTimeline
+        player.playWhenReady = state.isPlaying && !state.hasScheduledStart
 
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -149,6 +149,7 @@ class FrontPlayerActivity : AppCompatActivity(), ShareDialogFragment.Callback {
                     "ShareDialogFragment"
                 )
             } else {
+                publishCurrentHostState()
                 viewModel.stopSharing()
             }
         }
@@ -217,6 +218,10 @@ class FrontPlayerActivity : AppCompatActivity(), ShareDialogFragment.Callback {
                 isApplyingSharedState = true
                 try {
                     player.play()
+                    mainHandler.postDelayed(
+                        { publishCurrentHostState() },
+                        SCHEDULED_START_CLEAR_DELAY_MS
+                    )
                 } finally {
                     isApplyingSharedState = false
                 }
@@ -235,6 +240,7 @@ class FrontPlayerActivity : AppCompatActivity(), ShareDialogFragment.Callback {
 
         val anchorPositionMs = player.currentPosition
         val durationMs = player.duration.takeIf { it > 0L } ?: 0L
+        val wasPlayingBeforeShare = player.isPlaying
 
         isApplyingSharedState = true
         try {
@@ -244,11 +250,19 @@ class FrontPlayerActivity : AppCompatActivity(), ShareDialogFragment.Callback {
         }
 
         viewModel.pauseAt(anchorPositionMs, durationMs)
-        viewModel.startSharing(
+        val sharingStarted = viewModel.startSharing(
             hostDisplayId = getCurrentDisplayId(),
             targetDisplayIds = displayIds,
             anchorPositionMs = anchorPositionMs
         )
+
+        if (!sharingStarted) {
+            setBroadcastToggleChecked(false)
+
+            if (wasPlayingBeforeShare) {
+                player.play()
+            }
+        }
     }
 
     override fun onShareDialogDismissedWithoutSharing() {
@@ -259,6 +273,20 @@ class FrontPlayerActivity : AppCompatActivity(), ShareDialogFragment.Callback {
 
     fun getShareTargets(): List<DisplayInfo> {
         return displayRepository.getShareTargets(getCurrentDisplayId())
+    }
+
+    // After scheduled start, the host publishes normal state again so future updates are lightweight.
+    private fun publishCurrentHostState() {
+        if (!::player.isInitialized) return
+
+        val positionMs = player.currentPosition
+        val durationMs = player.duration.takeIf { it > 0L } ?: 0L
+
+        if (player.isPlaying) {
+            viewModel.playAt(positionMs)
+        } else {
+            viewModel.pauseAt(positionMs, durationMs)
+        }
     }
 
     private fun seekIfNeeded(positionMs: Long) {
@@ -313,5 +341,6 @@ class FrontPlayerActivity : AppCompatActivity(), ShareDialogFragment.Callback {
     companion object {
         private const val POSITION_UPDATE_INTERVAL_MS = 500L
         private const val SYNC_SEEK_TOLERANCE_MS = 250L
+        private const val SCHEDULED_START_CLEAR_DELAY_MS = 500L
     }
 }

@@ -54,8 +54,8 @@ class FrontPlayerViewModel(application: Application) : AndroidViewModel(applicat
         hostDisplayId: Int,
         targetDisplayIds: Set<Int>,
         anchorPositionMs: Long
-    ) {
-        CoWatchSessionManager.startSharing(
+    ): Boolean {
+        return CoWatchSessionManager.startSharing(
             context = getApplication<Application>().applicationContext,
             hostDisplayId = hostDisplayId,
             targetDisplayIds = targetDisplayIds,

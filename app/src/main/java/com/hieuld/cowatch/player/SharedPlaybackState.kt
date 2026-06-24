@@ -11,20 +11,6 @@ data class SharedPlaybackState(
     val updatedAtElapsedMs: Long = SystemClock.elapsedRealtime(),
     val startAtElapsedRealtimeMs: Long? = null
 ) {
-    fun expectedPositionAt(elapsedRealtimeMs: Long): Long {
-        val scheduledStartAt = startAtElapsedRealtimeMs ?: return positionMs
-        val baseElapsedMs = if (updatedAtElapsedMs > scheduledStartAt) {
-            updatedAtElapsedMs
-        } else {
-            scheduledStartAt
-        }
-        val elapsedSinceBaseMs = elapsedRealtimeMs - baseElapsedMs
-
-        if (elapsedSinceBaseMs <= 0L) return positionMs
-
-        return positionMs + (elapsedSinceBaseMs * playbackSpeed).toLong()
-    }
-
-    val hasSharedTimeline: Boolean
+    val hasScheduledStart: Boolean
         get() = startAtElapsedRealtimeMs != null
 }

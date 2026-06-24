@@ -1,13 +1,11 @@
 package com.hieuld.cowatch.ui
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModel
 import com.hieuld.cowatch.cowatch.CoWatchSession
 import com.hieuld.cowatch.cowatch.CoWatchSessionManager
 import com.hieuld.cowatch.player.PlaybackManager
-import com.hieuld.cowatch.sync.PlaybackSyncConfig
 
-class ReceiverPlayerViewModel(application: Application) : AndroidViewModel(application) {
+class ReceiverPlayerViewModel : ViewModel() {
 
     val playbackState = PlaybackManager.state
     val session = CoWatchSessionManager.session
@@ -28,11 +26,4 @@ class ReceiverPlayerViewModel(application: Application) : AndroidViewModel(appli
                 !session.participantDisplayIds.contains(expectedDisplayId)
     }
 
-    // Production calibration can seed this value; there is no debug UI in this phase.
-    fun getAudioLatencyOffsetMs(displayId: Int): Long {
-        return PlaybackSyncConfig.getAudioLatencyOffsetMs(
-            context = getApplication<Application>().applicationContext,
-            displayId = displayId
-        )
-    }
 }

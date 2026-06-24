@@ -7,8 +7,6 @@ import kotlinx.coroutines.flow.asStateFlow
 
 object PlaybackManager {
 
-    private const val HOST_TIMELINE_UPDATE_GRACE_MS = 1_000L
-
     private val _state = MutableStateFlow(SharedPlaybackState())
     val state: StateFlow<SharedPlaybackState> = _state.asStateFlow()
 
@@ -71,13 +69,7 @@ object PlaybackManager {
         val current = _state.value
         val nowMs = SystemClock.elapsedRealtime()
 
-        if (current.hasSharedTimeline) {
-            val scheduledStartAt = current.startAtElapsedRealtimeMs ?: return
-
-            if (!current.isPlaying || nowMs < scheduledStartAt + HOST_TIMELINE_UPDATE_GRACE_MS) {
-                return
-            }
-        }
+        if (current.hasScheduledStart) return
 
         _state.value = current.copy(
             positionMs = positionMs,

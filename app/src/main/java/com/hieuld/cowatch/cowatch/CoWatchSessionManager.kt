@@ -23,15 +23,15 @@ object CoWatchSessionManager {
         hostDisplayId: Int,
         targetDisplayIds: Set<Int>,
         anchorPositionMs: Long
-    ) {
+    ): Boolean {
         val playbackState = PlaybackManager.state.value
 
         if (playbackState.mediaUrl.isBlank()) {
-            return
+            return false
         }
 
         if (targetDisplayIds.isEmpty()) {
-            return
+            return false
         }
 
         val sessionId = UUID.randomUUID().toString()
@@ -47,7 +47,7 @@ object CoWatchSessionManager {
 
         _session.value = newSession
 
-        targetDisplayIds.forEach { displayId ->
+        val launchedDisplayIds = targetDisplayIds.filterTo(mutableSetOf()) { displayId ->
             launchReceiverOnDisplay(
                 context = context,
                 sessionId = sessionId,
@@ -56,6 +56,16 @@ object CoWatchSessionManager {
             )
         }
 
+        if (launchedDisplayIds.isEmpty()) {
+            _session.value = null
+            return false
+        }
+
+        if (launchedDisplayIds != targetDisplayIds) {
+            _session.value = newSession.copy(participantDisplayIds = launchedDisplayIds)
+        }
+
+        return true
     }
 
     private fun launchReceiverOnDisplay(
@@ -63,8 +73,8 @@ object CoWatchSessionManager {
         sessionId: String,
         displayId: Int,
         anchorPositionMs: Long
-    ) {
-        try {
+    ): Boolean {
+        return try {
             val intent = Intent(context, ReceiverActivity::class.java).apply {
                 putExtra(ReceiverActivity.EXTRA_SESSION_ID, sessionId)
                 putExtra(ReceiverActivity.EXTRA_DISPLAY_ID, displayId)
@@ -77,8 +87,10 @@ object CoWatchSessionManager {
                 .toBundle()
 
             context.startActivity(intent, options)
+            true
         } catch (e: Exception) {
-            // If launch fails, the session remains preparatory and can be cancelled by the host.
+            // Failed launches are removed from the session target set by the caller.
+            false
         }
     }
 

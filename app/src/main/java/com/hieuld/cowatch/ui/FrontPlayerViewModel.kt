@@ -2,54 +2,56 @@ package com.hieuld.cowatch.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.media3.exoplayer.ExoPlayer
+import com.hieuld.cowatch.cowatch.CoWatchMediaSessionAdapter
 import com.hieuld.cowatch.cowatch.CoWatchSessionManager
-import com.hieuld.cowatch.player.PlaybackManager
 
 class FrontPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
-    val playbackState = PlaybackManager.state
+    val playbackState = CoWatchMediaSessionAdapter.state
     val session = CoWatchSessionManager.session
 
-    // Keep media ownership in the playback state, not in the Activity view code.
-    fun setMediaIfNeeded(mediaUrl: String) {
-        PlaybackManager.setMediaIfNeeded(mediaUrl)
+    fun attachPlayer(player: ExoPlayer) {
+        CoWatchMediaSessionAdapter.attach(
+            context = getApplication<Application>().applicationContext,
+            exoPlayer = player
+        )
     }
 
-    // Host is the only writer for normal play intent.
-    fun playAt(positionMs: Long) {
-        PlaybackManager.playAt(positionMs)
-    }
-
-    // Host pause publishes the current media-clock anchor for receivers.
-    fun pauseAt(
-        positionMs: Long,
-        durationMs: Long
+    fun setMedia(
+        mediaUri: String,
+        title: String = "CoWatch Media"
     ) {
-        PlaybackManager.pauseAt(positionMs, durationMs)
+        CoWatchMediaSessionAdapter.setMedia(
+            mediaUri = mediaUri,
+            title = title
+        )
     }
 
-    // Host seek is a shared playback event.
+    fun play() {
+        CoWatchMediaSessionAdapter.play()
+    }
+
+    fun pause() {
+        CoWatchMediaSessionAdapter.pause()
+    }
+
     fun seekTo(positionMs: Long) {
-        PlaybackManager.seekTo(positionMs)
+        CoWatchMediaSessionAdapter.seekTo(positionMs)
     }
 
-    // Host speed changes are shared, but receiver correction speed changes are local only.
-    fun updateSpeedFromHost(
-        speed: Float,
-        positionMs: Long
-    ) {
-        PlaybackManager.updateSpeedFromHost(speed, positionMs)
+    fun setPlaybackSpeed(speed: Float) {
+        CoWatchMediaSessionAdapter.setPlaybackSpeed(speed)
     }
 
-    // During shared playback this keeps the moving host media clock fresh.
-    fun updatePositionFromHost(
-        positionMs: Long,
-        durationMs: Long
-    ) {
-        PlaybackManager.updatePositionFromHost(positionMs, durationMs)
+    fun publishHostSnapshot() {
+        CoWatchMediaSessionAdapter.publishHostSnapshot()
     }
 
-    // Starts one receiver Activity per selected display through the session manager.
+    fun clearScheduledStart() {
+        CoWatchMediaSessionAdapter.clearScheduledStart()
+    }
+
     fun startSharing(
         hostDisplayId: Int,
         targetDisplayIds: Set<Int>,
@@ -63,8 +65,16 @@ class FrontPlayerViewModel(application: Application) : AndroidViewModel(applicat
         )
     }
 
-    // Turning Broadcast off tears down receiver screens through shared session state.
     fun stopSharing() {
         CoWatchSessionManager.stopSharing()
+    }
+
+    fun releasePlayer() {
+        CoWatchMediaSessionAdapter.release()
+    }
+
+    override fun onCleared() {
+        CoWatchMediaSessionAdapter.release()
+        super.onCleared()
     }
 }

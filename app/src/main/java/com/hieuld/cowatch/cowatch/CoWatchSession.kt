@@ -5,7 +5,7 @@ data class CoWatchSession(
     val hostDisplayId: Int,
     val participantDisplayIds: Set<Int>,
     val readyDisplayIds: Set<Int> = emptySet(),
-    val mediaUrl: String,
+    val mediaUri: String,
     val anchorPositionMs: Long,
     val status: CoWatchSessionStatus
 ) {

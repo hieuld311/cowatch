@@ -4,21 +4,39 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.widget.TextView
-import androidx.appcompat.app.AppCompatActivity
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
-import com.hieuld.cowatch.R
 import com.hieuld.cowatch.player.SharedPlaybackState
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 
-class ReceiverActivity : AppCompatActivity() {
+class ReceiverActivity : ComponentActivity() {
 
     private lateinit var viewModel: ReceiverPlayerViewModel
     private lateinit var player: ExoPlayer
@@ -29,50 +47,51 @@ class ReceiverActivity : AppCompatActivity() {
     private var expectedDisplayId: Int = -1
     private var anchorPositionMs: Long = 0L
 
-    private var currentMediaUrl: String = ""
+    private var currentMediaUri: String = ""
     private var hasReportedReady = false
-    private var isApplyingSharedState = false
 
     private var scheduledStartRunnable: Runnable? = null
     private var lastScheduledStartAt: Long? = null
+    private var lastAppliedVersion = -1L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        setContentView(R.layout.activity_receiver)
-
         viewModel = ViewModelProvider(this)[ReceiverPlayerViewModel::class.java]
+
         expectedSessionId = intent.getStringExtra(EXTRA_SESSION_ID)
         expectedDisplayId = intent.getIntExtra(EXTRA_DISPLAY_ID, -1)
         anchorPositionMs = intent.getLongExtra(EXTRA_ANCHOR_POSITION_MS, 0L)
 
-        findViewById<TextView>(R.id.tvReceiverInfo).text =
-            "Receiver displayId=$expectedDisplayId"
-
         setupPlayer()
         observePlaybackState()
         observeSessionState()
+
+        setContent {
+            CoWatchTheme {
+                ReceiverScreen(
+                    player = player,
+                    displayId = expectedDisplayId
+                )
+            }
+        }
     }
 
-    // Receiver owns a local ExoPlayer instance but never writes playback commands back.
     private fun setupPlayer() {
-        val playerView = findViewById<PlayerView>(R.id.playerView)
-
-        player = ExoPlayer.Builder(this).build()
-        playerView.player = player
+        player = ExoPlayer.Builder(this).build().apply {
+            volume = 0f
+            trackSelectionParameters = trackSelectionParameters.buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+                .build()
+        }
 
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY && !hasReportedReady) {
                     hasReportedReady = true
 
-                    isApplyingSharedState = true
-                    try {
-                        player.seekTo(anchorPositionMs)
-                        player.pause()
-                    } finally {
-                        isApplyingSharedState = false
-                    }
+                    player.seekTo(anchorPositionMs)
+                    player.pause()
 
                     viewModel.markReceiverReady(expectedDisplayId)
                 }
@@ -80,7 +99,6 @@ class ReceiverActivity : AppCompatActivity() {
         })
     }
 
-    // Playback state tells the passive receiver what to render.
     private fun observePlaybackState() {
         lifecycleScope.launch {
             viewModel.playbackState.collectLatest { state ->
@@ -89,11 +107,16 @@ class ReceiverActivity : AppCompatActivity() {
         }
     }
 
-    // Session state decides whether this receiver still belongs on this display.
     private fun observeSessionState() {
         lifecycleScope.launch {
             viewModel.session.collectLatest { session ->
-                if (viewModel.shouldFinish(session, expectedSessionId, expectedDisplayId)) {
+                if (
+                    viewModel.shouldFinish(
+                        session = session,
+                        expectedSessionId = expectedSessionId,
+                        expectedDisplayId = expectedDisplayId
+                    )
+                ) {
                     finish()
                 }
             }
@@ -101,51 +124,51 @@ class ReceiverActivity : AppCompatActivity() {
     }
 
     private fun applySharedState(state: SharedPlaybackState) {
-        if (!::player.isInitialized || state.mediaUrl.isBlank()) return
+        if (!::player.isInitialized) return
+        if (state.mediaUri.isBlank()) return
+        if (state.version <= lastAppliedVersion) return
 
-        isApplyingSharedState = true
+        lastAppliedVersion = state.version
 
-        try {
-            if (currentMediaUrl != state.mediaUrl) {
-                prepareMediaAtAnchor(state.mediaUrl)
-                return
-            }
+        if (currentMediaUri != state.mediaUri) {
+            prepareMediaAtAnchor(state.mediaUri)
+            return
+        }
 
-            val scheduledStartAt = state.startAtElapsedRealtimeMs
+        val scheduledStartAt = state.startAtElapsedRealtimeMs
 
-            if (scheduledStartAt != null && state.isPlaying) {
-                seekIfNeeded(state.positionMs)
-                scheduleLocalStartIfNeeded(scheduledStartAt)
-                return
-            }
-
-            clearScheduledStart()
+        if (scheduledStartAt != null) {
+            player.pause()
             seekIfNeeded(state.positionMs)
+            scheduleLocalStartIfNeeded(scheduledStartAt)
+            return
+        }
 
-            if (player.playbackParameters.speed != state.playbackSpeed) {
-                player.setPlaybackSpeed(state.playbackSpeed)
-            }
+        clearLocalScheduledStart()
 
-            if (state.isPlaying && !player.isPlaying) {
-                player.play()
-            } else if (!state.isPlaying && player.isPlaying) {
-                player.pause()
-            }
-        } finally {
-            isApplyingSharedState = false
+        seekIfNeeded(state.positionMs)
+
+        if (player.playbackParameters.speed != state.playbackSpeed) {
+            player.setPlaybackSpeed(state.playbackSpeed)
+        }
+
+        if (state.isPlaying && !player.isPlaying) {
+            player.play()
+        } else if (!state.isPlaying && player.isPlaying) {
+            player.pause()
         }
     }
 
-    // Initial receiver preparation must land on the same anchor as the host.
-    private fun prepareMediaAtAnchor(mediaUrl: String) {
-        currentMediaUrl = mediaUrl
-        player.setMediaItem(MediaItem.fromUri(mediaUrl))
+    private fun prepareMediaAtAnchor(mediaUri: String) {
+        currentMediaUri = mediaUri
+        hasReportedReady = false
+
+        player.setMediaItem(MediaItem.fromUri(mediaUri))
         player.prepare()
         player.seekTo(anchorPositionMs)
         player.pause()
     }
 
-    // Scheduled start is the only continuous-sync mechanism in the lightweight branch.
     private fun scheduleLocalStartIfNeeded(startAtElapsedRealtimeMs: Long) {
         if (lastScheduledStartAt == startAtElapsedRealtimeMs) return
 
@@ -157,12 +180,7 @@ class ReceiverActivity : AppCompatActivity() {
 
         val runnable = Runnable {
             if (::player.isInitialized) {
-                isApplyingSharedState = true
-                try {
-                    player.play()
-                } finally {
-                    isApplyingSharedState = false
-                }
+                player.play()
             }
         }
 
@@ -178,14 +196,14 @@ class ReceiverActivity : AppCompatActivity() {
         }
     }
 
-    private fun clearScheduledStart() {
+    private fun clearLocalScheduledStart() {
         lastScheduledStartAt = null
         scheduledStartRunnable?.let(mainHandler::removeCallbacks)
         scheduledStartRunnable = null
     }
 
     override fun onDestroy() {
-        clearScheduledStart()
+        clearLocalScheduledStart()
 
         if (::player.isInitialized) {
             player.release()
@@ -200,5 +218,58 @@ class ReceiverActivity : AppCompatActivity() {
         const val EXTRA_ANCHOR_POSITION_MS = "extra_anchor_position_ms"
 
         private const val SYNC_SEEK_TOLERANCE_MS = 250L
+    }
+}
+
+@Composable
+private fun ReceiverScreen(
+    player: ExoPlayer,
+    displayId: Int
+) {
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = Color.Black
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { context ->
+                    PlayerView(context).apply {
+                        useController = false
+                        this.player = player
+                    }
+                },
+                update = { playerView ->
+                    playerView.useController = false
+                    if (playerView.player !== player) {
+                        playerView.player = player
+                    }
+                }
+            )
+
+            AnimatedVisibility(
+                visible = displayId >= 0,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0x990D1117)
+                ) {
+                    Text(
+                        text = "Receiver display $displayId",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .background(Color.Transparent)
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
+                    )
+                }
+            }
+        }
     }
 }

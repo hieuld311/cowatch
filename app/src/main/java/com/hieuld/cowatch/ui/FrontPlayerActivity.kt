@@ -1,20 +1,24 @@
 package com.hieuld.cowatch.ui
 
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
-import android.os.SystemClock
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -37,52 +41,59 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DividerDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
 import com.hieuld.cowatch.R
 import com.hieuld.cowatch.display.DisplayInfo
 import com.hieuld.cowatch.display.DisplayRepository
-import com.hieuld.cowatch.player.SharedPlaybackState
+import com.hieuld.cowatch.render.FrameFanoutRenderEngine
+import com.hieuld.cowatch.render.VideoRenderEngine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import kotlin.math.abs
+import kotlinx.coroutines.delay
 
 class FrontPlayerActivity : ComponentActivity() {
 
     private lateinit var viewModel: FrontPlayerViewModel
     private lateinit var player: ExoPlayer
     private lateinit var displayRepository: DisplayRepository
+    private lateinit var renderEngine: FrameFanoutRenderEngine
 
-    private val mainHandler = Handler(Looper.getMainLooper())
-
-    private var isApplyingSharedState = false
-    private var scheduledStartRunnable: Runnable? = null
-    private var lastScheduledStartAt: Long? = null
+    private var audioFallbackApplied = false
 
     private val broadcastEnabledState = mutableStateOf(false)
     private val shareDialogVisibleState = mutableStateOf(false)
@@ -91,40 +102,21 @@ class FrontPlayerActivity : ComponentActivity() {
         "android.resource://${packageName}/${R.raw.demo_video}"
     }
 
-    private val positionTicker = object : Runnable {
-        override fun run() {
-            val hasScheduledStart = if (::viewModel.isInitialized) {
-                viewModel.playbackState.value.hasScheduledStart
-            } else {
-                false
-            }
-
-            if (
-                ::player.isInitialized &&
-                !isApplyingSharedState &&
-                !hasScheduledStart
-            ) {
-                viewModel.publishHostSnapshot()
-            }
-
-            mainHandler.postDelayed(this, POSITION_UPDATE_INTERVAL_MS)
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         viewModel = ViewModelProvider(this)[FrontPlayerViewModel::class.java]
         displayRepository = DisplayRepository(this)
+        renderEngine = FrameFanoutRenderEngine()
 
         setupPlayer()
-        observePlaybackState()
         observeShareSession()
 
         setContent {
             CoWatchTheme {
                 FrontPlayerScreen(
                     player = player,
+                    renderEngine = renderEngine,
                     broadcastChecked = broadcastEnabledState.value || shareDialogVisibleState.value,
                     showShareDialog = shareDialogVisibleState.value,
                     displays = getShareTargets(),
@@ -134,48 +126,46 @@ class FrontPlayerActivity : ComponentActivity() {
                 )
             }
         }
-
-        mainHandler.post(positionTicker)
     }
 
     private fun setupPlayer() {
-        player = ExoPlayer.Builder(this).build()
-
-        viewModel.attachPlayer(player)
-        viewModel.setMedia(
-            mediaUri = demoVideoUrl,
-            title = "CoWatch Demo"
-        )
-
-        viewModel.play()
+        player = ExoPlayer.Builder(this).build().apply {
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(C.USAGE_MEDIA)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                    .build(),
+                true
+            )
+            volume = 1f
+        }
+        player.setVideoSurface(renderEngine.inputSurface)
+        player.setMediaItem(androidx.media3.common.MediaItem.fromUri(demoVideoUrl))
+        player.prepare()
+        player.play()
 
         player.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                if (isApplyingSharedState) return
-                if (viewModel.playbackState.value.hasScheduledStart) return
-                viewModel.publishHostSnapshot()
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                renderEngine.setVideoSize(
+                    width = videoSize.width,
+                    height = videoSize.height,
+                    pixelWidthHeightRatio = videoSize.pixelWidthHeightRatio
+                )
             }
 
-            override fun onPositionDiscontinuity(
-                oldPosition: Player.PositionInfo,
-                newPosition: Player.PositionInfo,
-                reason: Int
-            ) {
-                if (isApplyingSharedState) return
-                if (viewModel.playbackState.value.hasScheduledStart) return
+            override fun onPlayerError(error: PlaybackException) {
+                if (audioFallbackApplied || !error.hasAudioTrackInitializationFailure()) return
 
-                if (reason == Player.DISCONTINUITY_REASON_SEEK) {
-                    viewModel.publishHostSnapshot()
-                }
-            }
-
-            override fun onPlaybackParametersChanged(
-                playbackParameters: PlaybackParameters
-            ) {
-                if (isApplyingSharedState) return
-                if (viewModel.playbackState.value.hasScheduledStart) return
-
-                viewModel.publishHostSnapshot()
+                audioFallbackApplied = true
+                val resumePositionMs = player.currentPosition.coerceAtLeast(0L)
+                val resumePlayback = player.playWhenReady
+                player.trackSelectionParameters = player.trackSelectionParameters
+                    .buildUpon()
+                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+                    .build()
+                player.seekTo(resumePositionMs)
+                player.prepare()
+                player.playWhenReady = resumePlayback
             }
         })
     }
@@ -199,16 +189,7 @@ class FrontPlayerActivity : ComponentActivity() {
             shareDialogVisibleState.value = true
         } else {
             shareDialogVisibleState.value = false
-            viewModel.publishHostSnapshot()
             viewModel.stopSharing()
-        }
-    }
-
-    private fun observePlaybackState() {
-        lifecycleScope.launch {
-            viewModel.playbackState.collectLatest { state ->
-                applySharedStateToHost(state)
-            }
         }
     }
 
@@ -218,72 +199,6 @@ class FrontPlayerActivity : ComponentActivity() {
                 broadcastEnabledState.value = session != null
             }
         }
-    }
-
-    private fun applySharedStateToHost(state: SharedPlaybackState) {
-        if (!::player.isInitialized) return
-        if (state.mediaUri.isBlank()) return
-
-        isApplyingSharedState = true
-
-        try {
-            val scheduledStartAt = state.startAtElapsedRealtimeMs
-
-            if (scheduledStartAt != null) {
-                seekIfNeeded(state.positionMs)
-                scheduleLocalStartIfNeeded(scheduledStartAt)
-                return
-            }
-
-            clearLocalScheduledStart()
-
-            seekIfNeeded(state.positionMs)
-
-            if (player.playbackParameters.speed != state.playbackSpeed) {
-                player.setPlaybackSpeed(state.playbackSpeed)
-            }
-
-            if (state.isPlaying && !player.isPlaying) {
-                player.play()
-            } else if (!state.isPlaying && player.isPlaying) {
-                player.pause()
-            }
-        } finally {
-            isApplyingSharedState = false
-        }
-    }
-
-    private fun scheduleLocalStartIfNeeded(startAtElapsedRealtimeMs: Long) {
-        if (lastScheduledStartAt == startAtElapsedRealtimeMs) return
-
-        lastScheduledStartAt = startAtElapsedRealtimeMs
-        scheduledStartRunnable?.let(mainHandler::removeCallbacks)
-
-        val delayMs = (startAtElapsedRealtimeMs - SystemClock.elapsedRealtime())
-            .coerceAtLeast(0L)
-
-        val runnable = Runnable {
-            if (!::player.isInitialized) return@Runnable
-
-            isApplyingSharedState = true
-
-            try {
-                viewModel.play()
-
-                mainHandler.postDelayed(
-                    {
-                        viewModel.clearScheduledStart()
-                        viewModel.publishHostSnapshot()
-                    },
-                    SCHEDULED_START_CLEAR_DELAY_MS
-                )
-            } finally {
-                isApplyingSharedState = false
-            }
-        }
-
-        scheduledStartRunnable = runnable
-        mainHandler.postDelayed(runnable, delayMs)
     }
 
     private fun onStartSharing(displayIds: Set<Int>) {
@@ -296,29 +211,27 @@ class FrontPlayerActivity : ComponentActivity() {
 
         val anchorPositionMs = player.currentPosition
         val wasPlayingBeforeShare = player.isPlaying
-
-        isApplyingSharedState = true
-
-        try {
-            player.pause()
-        } finally {
-            isApplyingSharedState = false
-        }
-
-        viewModel.pause()
-        viewModel.publishHostSnapshot()
+        player.pause()
 
         val sharingStarted = viewModel.startSharing(
+            context = this,
             hostDisplayId = getCurrentDisplayId(),
             targetDisplayIds = displayIds,
-            anchorPositionMs = anchorPositionMs
+            anchorPositionMs = anchorPositionMs,
+            renderEngine = renderEngine,
+            onAllDisplaysReady = { startPositionMs ->
+                player.seekTo(startPositionMs)
+                if (wasPlayingBeforeShare) {
+                    player.play()
+                }
+            }
         )
 
         if (!sharingStarted) {
             broadcastEnabledState.value = false
 
             if (wasPlayingBeforeShare) {
-                viewModel.play()
+                player.play()
             }
         }
     }
@@ -335,55 +248,47 @@ class FrontPlayerActivity : ComponentActivity() {
         return displayRepository.getShareTargets(getCurrentDisplayId())
     }
 
-    private fun seekIfNeeded(positionMs: Long) {
-        val positionDiff = abs(player.currentPosition - positionMs)
-
-        if (positionDiff > SYNC_SEEK_TOLERANCE_MS) {
-            player.seekTo(positionMs)
-        }
-    }
-
-    private fun clearLocalScheduledStart() {
-        lastScheduledStartAt = null
-        scheduledStartRunnable?.let(mainHandler::removeCallbacks)
-        scheduledStartRunnable = null
-    }
-
     @Suppress("DEPRECATION")
     private fun getCurrentDisplayId(): Int {
         return windowManager.defaultDisplay.displayId
     }
 
-    override fun onStop() {
+    override fun onDestroy() {
         if (::player.isInitialized) {
-            viewModel.publishHostSnapshot()
+            player.clearVideoSurface()
+            player.release()
         }
 
-        super.onStop()
-    }
-
-    override fun onDestroy() {
-        clearLocalScheduledStart()
-        mainHandler.removeCallbacks(positionTicker)
-
-        if (::player.isInitialized) {
-            viewModel.releasePlayer()
-            player.release()
+        if (::renderEngine.isInitialized) {
+            renderEngine.release()
         }
 
         super.onDestroy()
     }
-
-    companion object {
-        private const val POSITION_UPDATE_INTERVAL_MS = 500L
-        private const val SYNC_SEEK_TOLERANCE_MS = 250L
-        private const val SCHEDULED_START_CLEAR_DELAY_MS = 200L
-    }
 }
+
+private fun Throwable.hasAudioTrackInitializationFailure(): Boolean {
+    var current: Throwable? = this
+
+    while (current != null) {
+        if (
+            current.javaClass.name.contains("AudioSink") ||
+            current.message?.contains("Cannot create AudioTrack") == true
+        ) {
+            return true
+        }
+        current = current.cause
+    }
+
+    return false
+}
+
+private const val HOST_RENDER_OUTPUT_ID = Int.MIN_VALUE
 
 @Composable
 private fun FrontPlayerScreen(
-    player: ExoPlayer,
+    player: Player,
+    renderEngine: VideoRenderEngine,
     broadcastChecked: Boolean,
     showShareDialog: Boolean,
     displays: List<DisplayInfo>,
@@ -396,44 +301,31 @@ private fun FrontPlayerScreen(
         color = Color.Black
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { context ->
-                    PlayerView(context).apply {
-                        useController = true
-                        this.player = player
-                    }
-                },
-                update = { playerView ->
-                    playerView.useController = true
-                    if (playerView.player !== player) {
-                        playerView.player = player
-                    }
-                }
-            )
+            Column(modifier = Modifier.fillMaxSize()) {
+                BroadcastTopBar(
+                    checked = broadcastChecked,
+                    onCheckedChange = onBroadcastCheckedChange,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(112.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color(0xEE05070A),
-                                Color(0x9905070A),
-                                Color.Transparent
-                            )
-                        )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .background(Color.Black)
+                ) {
+                    HostVideoSurface(
+                        modifier = Modifier.fillMaxSize(),
+                        renderEngine = renderEngine
                     )
-            )
 
-            BroadcastTopBar(
-                checked = broadcastChecked,
-                onCheckedChange = onBroadcastCheckedChange,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(horizontal = 20.dp, vertical = 14.dp)
-            )
+                    HostPlaybackControls(
+                        modifier = Modifier
+                            .matchParentSize(),
+                        player = player
+                    )
+                }
+            }
 
             if (showShareDialog) {
                 ShareDisplaysDialog(
@@ -447,74 +339,270 @@ private fun FrontPlayerScreen(
 }
 
 @Composable
+private fun HostVideoSurface(
+    renderEngine: VideoRenderEngine,
+    modifier: Modifier = Modifier
+) {
+    AndroidView(
+        modifier = modifier,
+        factory = { context ->
+            SurfaceView(context).apply {
+                holder.addCallback(object : SurfaceHolder.Callback {
+                    override fun surfaceCreated(holder: SurfaceHolder) = Unit
+
+                    override fun surfaceChanged(
+                        holder: SurfaceHolder,
+                        format: Int,
+                        width: Int,
+                        height: Int
+                    ) {
+                        renderEngine.addOutput(
+                            outputId = HOST_RENDER_OUTPUT_ID,
+                            surface = holder.surface,
+                            width = width,
+                            height = height
+                        )
+                    }
+
+                    override fun surfaceDestroyed(holder: SurfaceHolder) {
+                        renderEngine.removeOutput(HOST_RENDER_OUTPUT_ID)
+                    }
+                })
+            }
+        }
+    )
+}
+
+@Composable
+private fun HostPlaybackControls(
+    player: Player,
+    modifier: Modifier = Modifier
+) {
+    var isPlaying by remember { mutableStateOf(player.isPlaying) }
+    var durationMs by remember {
+        mutableStateOf(player.duration.takeIf { it > 0L } ?: 0L)
+    }
+    var positionMs by remember { mutableStateOf(player.currentPosition.coerceAtLeast(0L)) }
+    var sliderPositionMs by remember { mutableStateOf(positionMs) }
+    var isDragging by remember { mutableStateOf(false) }
+    var controlsVisible by remember { mutableStateOf(true) }
+    var interactionVersion by remember { mutableStateOf(0) }
+
+    fun showControls() {
+        controlsVisible = true
+        interactionVersion += 1
+    }
+
+    LaunchedEffect(player) {
+        while (true) {
+            isPlaying = player.isPlaying
+            durationMs = player.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
+            positionMs = player.currentPosition.coerceAtLeast(0L)
+
+            if (!isDragging) {
+                sliderPositionMs = positionMs
+            }
+
+            delay(250L)
+        }
+    }
+
+    LaunchedEffect(interactionVersion, controlsVisible, isDragging) {
+        if (controlsVisible && !isDragging) {
+            delay(CONTROLS_AUTO_HIDE_DELAY_MS)
+            controlsVisible = false
+        }
+    }
+
+    Box(
+        modifier = modifier.clickable(
+            indication = null,
+            interactionSource = remember {
+                androidx.compose.foundation.interaction.MutableInteractionSource()
+            }
+        ) {
+            showControls()
+        }
+    ) {
+        AnimatedVisibility(
+            visible = controlsVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            IconButton(
+                onClick = {
+                    showControls()
+                    if (player.isPlaying) {
+                        player.pause()
+                    } else {
+                        player.play()
+                    }
+                },
+                modifier = Modifier
+                    .size(88.dp)
+                    .clip(CircleShape)
+                    .background(Color(0x99000000))
+            ) {
+                Icon(
+                    painter = mediaControlPainter(isPlaying),
+                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    tint = Color.White,
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+        }
+
+        AnimatedVisibility(
+            visible = controlsVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = Color.Transparent
+            ) {
+                VideoSeekBar(
+                    positionMs = sliderPositionMs,
+                    durationMs = durationMs,
+                    onSeekPreview = { position ->
+                        showControls()
+                        isDragging = true
+                        sliderPositionMs = position
+                    },
+                    onSeekFinished = {
+                        player.seekTo(sliderPositionMs)
+                        isDragging = false
+                        showControls()
+                    },
+                    enabled = durationMs > 0L,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 12.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun VideoSeekBar(
+    positionMs: Long,
+    durationMs: Long,
+    enabled: Boolean,
+    onSeekPreview: (Long) -> Unit,
+    onSeekFinished: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var widthPx by remember { mutableStateOf(1) }
+
+    fun positionFromX(x: Float): Long {
+        if (durationMs <= 0L || widthPx <= 0) return 0L
+
+        val fraction = (x / widthPx)
+            .coerceIn(0f, 1f)
+        return (durationMs * fraction).toLong()
+    }
+
+    Canvas(
+        modifier = modifier
+            .height(48.dp)
+            .onSizeChanged { size -> widthPx = size.width.coerceAtLeast(1) }
+            .pointerInput(enabled, durationMs) {
+                if (!enabled) return@pointerInput
+
+                detectTapGestures { offset ->
+                    onSeekPreview(positionFromX(offset.x))
+                    onSeekFinished()
+                }
+            }
+            .pointerInput(enabled, durationMs) {
+                if (!enabled) return@pointerInput
+
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        onSeekPreview(positionFromX(offset.x))
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        onSeekPreview(positionFromX(change.position.x))
+                    },
+                    onDragEnd = onSeekFinished,
+                    onDragCancel = onSeekFinished
+                )
+            }
+    ) {
+        val trackY = size.height / 2f
+        val progress = if (durationMs > 0L) {
+            (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
+        } else {
+            0f
+        }
+        val progressX = size.width * progress
+        val strokeWidth = 6.dp.toPx()
+        val thumbRadius = 12.dp.toPx()
+
+        drawLine(
+            color = Color(0xFF777777),
+            start = androidx.compose.ui.geometry.Offset(0f, trackY),
+            end = androidx.compose.ui.geometry.Offset(size.width, trackY),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = Color(0xFF111111),
+            start = androidx.compose.ui.geometry.Offset(0f, trackY),
+            end = androidx.compose.ui.geometry.Offset(progressX, trackY),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+        drawCircle(
+            color = Color.White,
+            radius = thumbRadius,
+            center = androidx.compose.ui.geometry.Offset(progressX, trackY)
+        )
+    }
+}
+
+@Composable
+private fun mediaControlPainter(isPlaying: Boolean): Painter {
+    return painterResource(
+        id = if (isPlaying) {
+            android.R.drawable.ic_media_pause
+        } else {
+            android.R.drawable.ic_media_play
+        }
+    )
+}
+
+private const val CONTROLS_AUTO_HIDE_DELAY_MS = 3_000L
+
+@Composable
 private fun BroadcastTopBar(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val barAlpha by animateFloatAsState(
-        targetValue = if (checked) 1f else 0.92f,
-        label = "barAlpha"
-    )
-    val statusColor by animateColorAsState(
-        targetValue = if (checked) Color(0xFF7EE787) else Color(0xFF8B949E),
-        label = "statusColor"
-    )
-
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .alpha(barAlpha),
-        shape = RoundedCornerShape(8.dp),
-        color = Color(0xCC0D1117),
-        tonalElevation = 4.dp,
-        shadowElevation = 4.dp
+        modifier = modifier,
+        color = Color(0xFF0D1117),
+        tonalElevation = 2.dp,
+        shadowElevation = 2.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(64.dp)
-                .padding(horizontal = 18.dp),
+                .height(72.dp)
+                .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "CoWatch",
-                    color = Color.White,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                AnimatedVisibility(
-                    visible = checked,
-                    enter = fadeIn() + slideInVertically { -it / 3 },
-                    exit = fadeOut() + slideOutVertically { -it / 3 }
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 3.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .background(statusColor, CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = "Broadcasting",
-                            color = Color(0xFFC9D1D9),
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
-                }
-            }
+            Spacer(modifier = Modifier.weight(1f))
 
             Text(
-                text = if (checked) "On" else "Off",
+                text = if (checked) "Sharing" else "Share",
                 color = Color(0xFFC9D1D9),
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.padding(end = 12.dp)

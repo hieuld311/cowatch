@@ -5,11 +5,10 @@ data class CoWatchSession(
     val hostDisplayId: Int,
     val participantDisplayIds: Set<Int>,
     val readyDisplayIds: Set<Int> = emptySet(),
-    val mediaUri: String,
     val anchorPositionMs: Long,
     val status: CoWatchSessionStatus
 ) {
-    val allReceiversReady: Boolean
+    val allDisplaysReady: Boolean
         get() = participantDisplayIds.isNotEmpty() &&
                 readyDisplayIds.containsAll(participantDisplayIds)
 }

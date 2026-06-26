@@ -1,10 +1,8 @@
 package com.hieuld.cowatch.cowatch
 
-import android.app.ActivityOptions
 import android.content.Context
-import android.content.Intent
-import android.os.SystemClock
-import com.hieuld.cowatch.ui.ReceiverActivity
+import com.hieuld.cowatch.display.PresentationDisplayManager
+import com.hieuld.cowatch.render.VideoRenderEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,62 +10,66 @@ import java.util.UUID
 
 object CoWatchSessionManager {
 
-    private const val START_DELAY_MS = 1_500L
-
     private val _session = MutableStateFlow<CoWatchSession?>(null)
     val session: StateFlow<CoWatchSession?> = _session.asStateFlow()
+
+    private var presentationDisplayManager: PresentationDisplayManager? = null
+    private var onAllDisplaysReady: ((Long) -> Unit)? = null
 
     fun startSharing(
         context: Context,
         hostDisplayId: Int,
         targetDisplayIds: Set<Int>,
-        anchorPositionMs: Long
+        anchorPositionMs: Long,
+        renderEngine: VideoRenderEngine,
+        onAllDisplaysReady: (Long) -> Unit
     ): Boolean {
         if (targetDisplayIds.isEmpty()) return false
 
-        val playbackState = CoWatchMediaSessionAdapter.state.value
-        if (playbackState.mediaUri.isBlank()) return false
-
         val sessionId = UUID.randomUUID().toString()
-
-        CoWatchMediaSessionAdapter.beginCoWatchSession(sessionId)
 
         val newSession = CoWatchSession(
             sessionId = sessionId,
             hostDisplayId = hostDisplayId,
             participantDisplayIds = targetDisplayIds,
             readyDisplayIds = emptySet(),
-            mediaUri = playbackState.mediaUri,
             anchorPositionMs = anchorPositionMs,
             status = CoWatchSessionStatus.PREPARING_SHARE
         )
 
         _session.value = newSession
+        this.onAllDisplaysReady = onAllDisplaysReady
 
-        val launchedDisplayIds = targetDisplayIds.filterTo(mutableSetOf()) { displayId ->
-            launchReceiverOnDisplay(
-                context = context.applicationContext,
-                session = newSession,
-                displayId = displayId
-            )
-        }
+        val displayManager = PresentationDisplayManager(
+            context = context,
+            renderEngine = renderEngine,
+            onDisplayReady = ::markDisplayReady,
+            onDisplayRemoved = ::handlePresentationDisplayRemoved
+        )
+        presentationDisplayManager = displayManager
+
+        val launchedDisplayIds = displayManager.show(targetDisplayIds)
 
         if (launchedDisplayIds.isEmpty()) {
             _session.value = null
-            CoWatchMediaSessionAdapter.endCoWatchSession()
+            presentationDisplayManager?.dismissAll()
+            presentationDisplayManager = null
+            this.onAllDisplaysReady = null
             return false
         }
 
         if (launchedDisplayIds != targetDisplayIds) {
-            _session.value = newSession.copy(
-                participantDisplayIds = launchedDisplayIds
+            val current = _session.value ?: newSession
+            _session.value = current.copy(
+                participantDisplayIds = launchedDisplayIds,
+                readyDisplayIds = current.readyDisplayIds.intersect(launchedDisplayIds)
             )
         }
 
         return true
     }
 
-    fun markReceiverReady(displayId: Int) {
+    fun markDisplayReady(displayId: Int) {
         val current = _session.value ?: return
 
         if (current.status != CoWatchSessionStatus.PREPARING_SHARE) return
@@ -80,14 +82,16 @@ object CoWatchSessionManager {
 
         _session.value = updatedSession
 
-        if (updatedSession.allReceiversReady) {
+        if (updatedSession.allDisplaysReady) {
             startSynchronizedPlayback(updatedSession)
         }
     }
 
     fun stopSharing() {
+        presentationDisplayManager?.dismissAll()
+        presentationDisplayManager = null
+        onAllDisplaysReady = null
         _session.value = null
-        CoWatchMediaSessionAdapter.endCoWatchSession()
     }
 
     fun isSharing(): Boolean {
@@ -98,46 +102,31 @@ object CoWatchSessionManager {
         return _session.value
     }
 
+    private fun handlePresentationDisplayRemoved(displayId: Int) {
+        val current = _session.value ?: return
+        if (displayId !in current.participantDisplayIds) return
+
+        val remainingDisplayIds = current.participantDisplayIds - displayId
+
+        if (remainingDisplayIds.isEmpty()) {
+            onAllDisplaysReady = null
+            _session.value = null
+            return
+        }
+
+        _session.value = current.copy(
+            participantDisplayIds = remainingDisplayIds,
+            readyDisplayIds = current.readyDisplayIds - displayId
+        )
+    }
+
     private fun startSynchronizedPlayback(session: CoWatchSession) {
         if (session.status != CoWatchSessionStatus.PREPARING_SHARE) return
-
-        val startAtElapsedRealtimeMs =
-            SystemClock.elapsedRealtime() + START_DELAY_MS
-
-        CoWatchMediaSessionAdapter.publishSynchronizedStart(
-            positionMs = session.anchorPositionMs,
-            startAtElapsedRealtimeMs = startAtElapsedRealtimeMs
-        )
 
         _session.value = session.copy(
             status = CoWatchSessionStatus.PLAYING_SHARED
         )
+        onAllDisplaysReady?.invoke(session.anchorPositionMs)
     }
 
-    private fun launchReceiverOnDisplay(
-        context: Context,
-        session: CoWatchSession,
-        displayId: Int
-    ): Boolean {
-        return try {
-            val intent = Intent(context, ReceiverActivity::class.java).apply {
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                putExtra(ReceiverActivity.EXTRA_SESSION_ID, session.sessionId)
-                putExtra(ReceiverActivity.EXTRA_DISPLAY_ID, displayId)
-                putExtra(
-                    ReceiverActivity.EXTRA_ANCHOR_POSITION_MS,
-                    session.anchorPositionMs
-                )
-            }
-
-            val options = ActivityOptions.makeBasic()
-                .setLaunchDisplayId(displayId)
-                .toBundle()
-
-            context.startActivity(intent, options)
-            true
-        } catch (_: Exception) {
-            false
-        }
-    }
 }

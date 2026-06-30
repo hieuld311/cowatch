@@ -10,7 +10,7 @@ interface VideoRenderEngine {
         surface: Surface,
         width: Int,
         height: Int
-    )
+    ): Boolean
 
     fun removeOutput(outputId: Int)
 

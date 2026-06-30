@@ -11,6 +11,7 @@ import android.opengl.GLES20
 import android.opengl.Matrix
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.view.Surface
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
@@ -60,13 +61,16 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
         surface: Surface,
         width: Int,
         height: Int
-    ) {
-        if (released.get()) return
+    ): Boolean {
+        if (released.get()) return false
 
-        renderHandler.post {
+        var added = false
+        runOnRenderThreadAndWait {
+            if (released.get()) return@runOnRenderThreadAndWait
+
             removeOutputOnRenderThread(outputId)
 
-            if (!surface.isValid) return@post
+            if (!surface.isValid) return@runOnRenderThreadAndWait
 
             val eglSurface = EGL14.eglCreateWindowSurface(
                 eglDisplay,
@@ -76,7 +80,7 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
                 0
             )
 
-            if (eglSurface == EGL14.EGL_NO_SURFACE) return@post
+            if (eglSurface == EGL14.EGL_NO_SURFACE) return@runOnRenderThreadAndWait
 
             outputs[outputId] = OutputTarget(
                 surface = surface,
@@ -85,11 +89,16 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
                 height = height.coerceAtLeast(1)
             )
             renderCurrentFrame()
+            added = outputs.containsKey(outputId)
         }
+
+        return added
     }
 
     override fun removeOutput(outputId: Int) {
-        renderHandler.post {
+        if (released.get()) return
+
+        runOnRenderThreadAndWait {
             removeOutputOnRenderThread(outputId)
         }
     }
@@ -224,15 +233,23 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTextureId)
         GLES20.glUniformMatrix4fv(uTexMatrixLocation, 1, false, textureMatrix, 0)
 
-        outputs.values.forEach { target ->
-            if (!target.surface.isValid) return@forEach
+        outputs.entries.toList().forEach { (outputId, target) ->
+            if (!target.surface.isValid) {
+                removeOutputOnRenderThread(outputId)
+                return@forEach
+            }
 
-            EGL14.eglMakeCurrent(
+            val current = EGL14.eglMakeCurrent(
                 eglDisplay,
                 target.eglSurface,
                 target.eglSurface,
                 eglContext
             )
+
+            if (!current) {
+                removeOutputOnRenderThread(outputId)
+                return@forEach
+            }
 
             GLES20.glClearColor(0f, 0f, 0f, 1f)
             GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
@@ -244,7 +261,9 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
                 viewport.height
             )
             drawFullScreenQuad()
-            EGL14.eglSwapBuffers(eglDisplay, target.eglSurface)
+            if (!EGL14.eglSwapBuffers(eglDisplay, target.eglSurface)) {
+                removeOutputOnRenderThread(outputId)
+            }
         }
     }
 
@@ -306,7 +325,25 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
 
     private fun removeOutputOnRenderThread(outputId: Int) {
         val target = outputs.remove(outputId) ?: return
+        EGL14.eglMakeCurrent(eglDisplay, setupSurface, setupSurface, eglContext)
         EGL14.eglDestroySurface(eglDisplay, target.eglSurface)
+    }
+
+    private fun runOnRenderThreadAndWait(block: () -> Unit) {
+        if (Looper.myLooper() == renderHandler.looper) {
+            block()
+            return
+        }
+
+        val done = CountDownLatch(1)
+        renderHandler.post {
+            try {
+                block()
+            } finally {
+                done.countDown()
+            }
+        }
+        done.await()
     }
 
     private fun createOesTexture(): Int {

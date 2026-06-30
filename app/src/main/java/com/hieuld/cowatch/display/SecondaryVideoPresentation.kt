@@ -33,13 +33,18 @@ class SecondaryVideoPresentation(
                     width: Int,
                     height: Int
                 ) {
-                    renderEngine.addOutput(
+                    val outputAdded = renderEngine.addOutput(
                         outputId = displayId,
                         surface = holder.surface,
                         width = width,
                         height = height
                     )
-                    onSurfaceReady(displayId)
+
+                    if (outputAdded) {
+                        onSurfaceReady(displayId)
+                    } else {
+                        onSurfaceDestroyed(displayId)
+                    }
                 }
 
                 override fun surfaceDestroyed(holder: SurfaceHolder) {

@@ -39,15 +39,14 @@ class FrontPlayerActivity : ComponentActivity() {
 
     private val broadcastEnabledState = mutableStateOf(false)
     private val shareDialogVisibleState = mutableStateOf(false)
-    private val fullscreenState = mutableStateOf(false)
-    private var selectedSource: VideoSource? = null
+    private val shareTargetsState = mutableStateOf(emptyList<DisplayInfo>())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        selectedSource = FrontPlayerContract.readVideo(intent)
+        val source = FrontPlayerContract.readVideo(intent)
 
-        if (selectedSource == null) {
+        if (source == null) {
             Toast.makeText(this, "Select a video first", Toast.LENGTH_SHORT).show()
             finish()
             return
@@ -57,22 +56,21 @@ class FrontPlayerActivity : ComponentActivity() {
         displayRepository = DisplayRepository(this)
         renderEngine = FrameFanoutRenderEngine()
 
-        setupPlayer()
+        setupPlayer(source)
         observeShareSession()
+        applyFullscreenMode(true)
 
         setContent {
             CoWatchTheme {
                 FrontPlayerScreen(
                     player = player,
                     renderEngine = renderEngine,
-                    broadcastChecked = broadcastEnabledState.value || shareDialogVisibleState.value,
+                    broadcastChecked = broadcastEnabledState.value,
                     showShareDialog = shareDialogVisibleState.value,
-                    isFullscreen = fullscreenState.value,
-                    displays = getShareTargets(),
+                    displays = shareTargetsState.value,
                     onBroadcastCheckedChange = ::onBroadcastCheckedChange,
                     onShareDialogDismiss = ::onShareDialogDismissedWithoutSharing,
                     onStartSharing = ::onStartSharing,
-                    onFullscreenToggle = ::onFullscreenToggle,
                     onBackClick = ::onBackToLibrary
                 )
             }
@@ -84,14 +82,13 @@ class FrontPlayerActivity : ComponentActivity() {
         setIntent(intent)
 
         val video = FrontPlayerContract.readVideo(intent) ?: return
-        selectedSource = video
 
         if (::player.isInitialized) {
             playVideo(video)
         }
     }
 
-    private fun setupPlayer() {
+    private fun setupPlayer(source: VideoSource) {
         player = ExoPlayer.Builder(this).build().apply {
             setAudioAttributes(
                 AudioAttributes.Builder()
@@ -106,33 +103,18 @@ class FrontPlayerActivity : ComponentActivity() {
 
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
-                viewModel.setPlaybackState(
-                    when (playbackState) {
-                        Player.STATE_BUFFERING -> CoWatchPlaybackState.Preparing
-                        Player.STATE_READY -> {
-                            if (viewModel.session.value != null && player.isPlaying) {
-                                CoWatchPlaybackState.Sharing
-                            } else if (player.isPlaying) {
-                                CoWatchPlaybackState.Playing
-                            } else {
-                                CoWatchPlaybackState.Paused
-                            }
-                        }
-                        Player.STATE_ENDED -> CoWatchPlaybackState.Paused
-                        else -> CoWatchPlaybackState.Idle
+                when (playbackState) {
+                    Player.STATE_BUFFERING -> {
+                        viewModel.setPlaybackState(CoWatchPlaybackState.Preparing)
                     }
-                )
+                    Player.STATE_READY,
+                    Player.STATE_ENDED -> updatePlaybackStateFromPlayer()
+                    else -> viewModel.setPlaybackState(CoWatchPlaybackState.Idle)
+                }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
-                val state = if (viewModel.session.value != null && isPlaying) {
-                    CoWatchPlaybackState.Sharing
-                } else if (isPlaying) {
-                    CoWatchPlaybackState.Playing
-                } else {
-                    CoWatchPlaybackState.Paused
-                }
-                viewModel.setPlaybackState(state)
+                updatePlaybackStateFromPlayer()
             }
 
             override fun onVideoSizeChanged(videoSize: VideoSize) {
@@ -164,7 +146,7 @@ class FrontPlayerActivity : ComponentActivity() {
             }
         })
 
-        selectedSource?.let(::playVideo)
+        playVideo(source)
     }
 
     private fun playVideo(source: VideoSource) {
@@ -192,12 +174,15 @@ class FrontPlayerActivity : ComponentActivity() {
 
                 broadcastEnabledState.value = false
                 shareDialogVisibleState.value = false
+                shareTargetsState.value = emptyList()
                 return
             }
 
+            shareTargetsState.value = targets
             shareDialogVisibleState.value = true
         } else {
             shareDialogVisibleState.value = false
+            shareTargetsState.value = emptyList()
             viewModel.stopSharing()
             updatePlaybackStateFromPlayer()
         }
@@ -213,6 +198,7 @@ class FrontPlayerActivity : ComponentActivity() {
 
     private fun onStartSharing(displayIds: Set<Int>) {
         shareDialogVisibleState.value = false
+        shareTargetsState.value = emptyList()
 
         if (displayIds.isEmpty() || !::player.isInitialized) {
             broadcastEnabledState.value = false
@@ -257,17 +243,12 @@ class FrontPlayerActivity : ComponentActivity() {
 
     private fun onShareDialogDismissedWithoutSharing() {
         shareDialogVisibleState.value = false
+        shareTargetsState.value = emptyList()
 
         if (viewModel.session.value == null) {
             broadcastEnabledState.value = false
             updatePlaybackStateFromPlayer()
         }
-    }
-
-    private fun onFullscreenToggle() {
-        val fullscreen = !fullscreenState.value
-        fullscreenState.value = fullscreen
-        applyFullscreenMode(fullscreen)
     }
 
     private fun onBackToLibrary() {
@@ -283,10 +264,10 @@ class FrontPlayerActivity : ComponentActivity() {
         }
 
         viewModel.setPlaybackState(
-            if (player.isPlaying) {
-                CoWatchPlaybackState.Playing
-            } else {
-                CoWatchPlaybackState.Paused
+            when {
+                viewModel.session.value != null && player.isPlaying -> CoWatchPlaybackState.Sharing
+                player.isPlaying -> CoWatchPlaybackState.Playing
+                else -> CoWatchPlaybackState.Paused
             }
         )
     }
@@ -314,9 +295,7 @@ class FrontPlayerActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        if (fullscreenState.value) {
-            applyFullscreenMode(false)
-        }
+        applyFullscreenMode(false)
 
         if (::player.isInitialized) {
             player.clearVideoSurface()

@@ -4,13 +4,16 @@ import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.Player
 import com.hieuld.cowatch.display.DisplayInfo
@@ -24,12 +27,10 @@ internal fun FrontPlayerScreen(
     renderEngine: VideoRenderEngine,
     broadcastChecked: Boolean,
     showShareDialog: Boolean,
-    isFullscreen: Boolean,
     displays: List<DisplayInfo>,
     onBroadcastCheckedChange: (Boolean) -> Unit,
     onShareDialogDismiss: () -> Unit,
     onStartSharing: (Set<Int>) -> Unit,
-    onFullscreenToggle: () -> Unit,
     onBackClick: () -> Unit
 ) {
     Surface(
@@ -37,35 +38,13 @@ internal fun FrontPlayerScreen(
         color = Color.Black
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                if (!isFullscreen) {
-                    BroadcastTopBar(
-                        checked = broadcastChecked,
-                        onCheckedChange = onBroadcastCheckedChange,
-                        onBackClick = onBackClick,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                        .background(Color.Black)
-                ) {
-                    HostVideoSurface(
-                        modifier = Modifier.fillMaxSize(),
-                        renderEngine = renderEngine
-                    )
-
-                    HostPlaybackControls(
-                        modifier = Modifier.matchParentSize(),
-                        player = player,
-                        isFullscreen = isFullscreen,
-                        onFullscreenToggle = onFullscreenToggle
-                    )
-                }
-            }
+            FullPlayerShell(
+                player = player,
+                renderEngine = renderEngine,
+                broadcastChecked = broadcastChecked,
+                onBroadcastCheckedChange = onBroadcastCheckedChange,
+                onBackClick = onBackClick
+            )
 
             if (showShareDialog) {
                 ShareDisplaysDialog(
@@ -74,6 +53,43 @@ internal fun FrontPlayerScreen(
                     onStartSharing = onStartSharing
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun FullPlayerShell(
+    player: Player,
+    renderEngine: VideoRenderEngine,
+    broadcastChecked: Boolean,
+    onBroadcastCheckedChange: (Boolean) -> Unit,
+    onBackClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    ) {
+        HostVideoSurface(
+            modifier = Modifier.fillMaxSize(),
+            renderEngine = renderEngine
+        )
+
+        HostPlaybackControls(
+            modifier = Modifier.matchParentSize(),
+            player = player,
+            broadcastChecked = broadcastChecked,
+            onBroadcastCheckedChange = onBroadcastCheckedChange
+        )
+
+        IconButton(
+            onClick = onBackClick,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 12.dp, end = 12.dp)
+                .size(64.dp)
+        ) {
+            CloseGlyph(modifier = Modifier.size(36.dp))
         }
     }
 }

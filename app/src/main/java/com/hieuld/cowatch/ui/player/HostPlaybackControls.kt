@@ -49,24 +49,26 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.C
 import androidx.media3.common.Player
+import androidx.media3.common.PlaybackParameters
 import kotlinx.coroutines.delay
 
 private const val CONTROLS_AUTO_HIDE_DELAY_MS = 3_000L
+private val PLAYBACK_SPEEDS = listOf(1f, 1.5f, 2f)
 
 @Composable
 internal fun HostPlaybackControls(
     player: Player,
-    isFullscreen: Boolean,
-    onFullscreenToggle: () -> Unit,
+    broadcastChecked: Boolean,
+    onBroadcastCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
     var durationMs by remember {
         mutableStateOf(player.duration.takeIf { it > 0L } ?: 0L)
     }
-    var positionMs by remember { mutableStateOf(player.currentPosition.coerceAtLeast(0L)) }
-    var sliderPositionMs by remember { mutableStateOf(positionMs) }
+    var sliderPositionMs by remember { mutableStateOf(player.currentPosition.coerceAtLeast(0L)) }
     var videoTitle by remember { mutableStateOf(resolvePlayerTitle(player)) }
+    var playbackSpeed by remember { mutableStateOf(player.playbackParameters.speed) }
     var isDragging by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
     var interactionVersion by remember { mutableStateOf(0) }
@@ -78,11 +80,12 @@ internal fun HostPlaybackControls(
     fun refreshPlaybackSnapshot(updateSlider: Boolean) {
         isPlaying = player.isPlaying
         durationMs = normalizedDuration()
-        positionMs = player.currentPosition.coerceAtLeast(0L)
+        val currentPositionMs = player.currentPosition.coerceAtLeast(0L)
         videoTitle = resolvePlayerTitle(player)
+        playbackSpeed = player.playbackParameters.speed
 
         if (updateSlider && !isDragging) {
-            sliderPositionMs = positionMs
+            sliderPositionMs = currentPositionMs
         }
     }
 
@@ -111,8 +114,7 @@ internal fun HostPlaybackControls(
         if (!controlsVisible || !isPlaying || isDragging) return@LaunchedEffect
 
         while (true) {
-            positionMs = player.currentPosition.coerceAtLeast(0L)
-            sliderPositionMs = positionMs
+            sliderPositionMs = player.currentPosition.coerceAtLeast(0L)
             delay(250L)
         }
     }
@@ -143,13 +145,13 @@ internal fun HostPlaybackControls(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(112.dp)
+                    .height(118.dp)
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                Color(0x8017142F),
-                                Color(0xE617142F),
-                                Color(0xFF17142F)
+                                Color(0x0017142F),
+                                Color(0xCC17142F),
+                                Color(0xF217142F)
                             )
                         )
                     )
@@ -164,7 +166,6 @@ internal fun HostPlaybackControls(
                     },
                     onSeekFinished = {
                         player.seekTo(sliderPositionMs)
-                        positionMs = sliderPositionMs
                         isDragging = false
                         showControls()
                     },
@@ -178,7 +179,7 @@ internal fun HostPlaybackControls(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
+                        .padding(start = 88.dp, end = 88.dp, bottom = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(
@@ -193,30 +194,55 @@ internal fun HostPlaybackControls(
                         PlayerBarText(
                             text = videoTitle,
                             alpha = 0.86f,
-                            style = MaterialTheme.typography.bodyLarge,
+                            style = MaterialTheme.typography.bodySmall,
                             overflow = TextOverflow.Ellipsis
                         )
                     }
 
                     Row(
-                        modifier = Modifier.weight(1f),
+                        modifier = Modifier.weight(1.2f),
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .clickable {
+                                    showControls()
+                                    onBroadcastCheckedChange(!broadcastChecked)
+                                },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            BroadcastGlyph(active = broadcastChecked)
+                        }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        PlayerBarText(
+                            text = formatSpeed(playbackSpeed),
+                            alpha = 0.88f,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clickable {
+                                showControls()
+                                val nextSpeed = nextPlaybackSpeed(playbackSpeed)
+                                player.playbackParameters = PlaybackParameters(nextSpeed)
+                                playbackSpeed = nextSpeed
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
                         MediaControlButton(
                             painter = painterResource(android.R.drawable.ic_media_rew),
                             contentDescription = "Back",
-                            size = 48.dp,
-                            iconSize = 30.dp,
+                            size = 34.dp,
+                            iconSize = 22.dp,
                             onClick = {
                                 showControls()
                                 val target = (player.currentPosition - 5_000L).coerceAtLeast(0L)
                                 player.seekTo(target)
-                                positionMs = target
                                 sliderPositionMs = target
                             }
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         IconButton(
                             onClick = {
                                 showControls()
@@ -227,62 +253,50 @@ internal fun HostPlaybackControls(
                                 }
                             },
                             modifier = Modifier
-                                .size(64.dp)
+                                .size(58.dp)
                                 .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.10f))
+                                .background(Color.White.copy(alpha = 0.12f))
                         ) {
                             Icon(
                                 painter = mediaControlPainter(isPlaying),
                                 contentDescription = if (isPlaying) "Pause" else "Play",
                                 tint = Color.White,
-                                modifier = Modifier.size(42.dp)
+                                modifier = Modifier.size(38.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
                         MediaControlButton(
                             painter = painterResource(android.R.drawable.ic_media_ff),
                             contentDescription = "Forward",
-                            size = 48.dp,
-                            iconSize = 30.dp,
+                            size = 34.dp,
+                            iconSize = 22.dp,
                             onClick = {
                                 showControls()
                                 val target = player.currentPosition + 5_000L
                                 val targetPosition =
                                     if (durationMs > 0L) target.coerceAtMost(durationMs) else target
                                 player.seekTo(targetPosition)
-                                positionMs = targetPosition
                                 sliderPositionMs = targetPosition
                             }
                         )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Box(
+                            modifier = Modifier.size(36.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            PictureInPictureGlyph()
+                        }
                     }
 
-                    Row(
+                    Box(
                         modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.End,
-                        verticalAlignment = Alignment.CenterVertically
+                        contentAlignment = Alignment.CenterEnd
                     ) {
                         PlayerBarText(
                             text = formatPlaybackTime(durationMs),
                             alpha = 0.62f,
                             style = MaterialTheme.typography.labelMedium
                         )
-                        Spacer(modifier = Modifier.width(28.dp))
-                        PlayerBarText(
-                            text = "1.0X",
-                            alpha = 0.88f,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.width(16.dp))
-                        IconButton(
-                            onClick = {
-                                showControls()
-                                onFullscreenToggle()
-                            },
-                            modifier = Modifier.size(44.dp)
-                        ) {
-                            FullscreenGlyph(isFullscreen = isFullscreen)
-                        }
                     }
                 }
             }
@@ -419,4 +433,24 @@ private fun mediaControlPainter(isPlaying: Boolean): Painter {
             android.R.drawable.ic_media_play
         }
     )
+}
+
+private fun nextPlaybackSpeed(currentSpeed: Float): Float {
+    val currentIndex = PLAYBACK_SPEEDS.indexOfFirst { speed ->
+        kotlin.math.abs(speed - currentSpeed) < 0.05f
+    }
+    return PLAYBACK_SPEEDS[(currentIndex + 1).floorMod(PLAYBACK_SPEEDS.size)]
+}
+
+private fun formatSpeed(speed: Float): String {
+    val normalized = PLAYBACK_SPEEDS.minBy { kotlin.math.abs(it - speed) }
+    return when (normalized) {
+        1f -> "1X"
+        1.5f -> "1.5X"
+        else -> "2X"
+    }
+}
+
+private fun Int.floorMod(other: Int): Int {
+    return ((this % other) + other) % other
 }

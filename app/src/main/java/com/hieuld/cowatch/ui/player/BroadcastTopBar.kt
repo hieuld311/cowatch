@@ -38,7 +38,7 @@ internal fun BroadcastTopBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(72.dp)
+                .height(44.dp)
                 .padding(horizontal = 20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

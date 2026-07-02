@@ -1,6 +1,7 @@
 package com.hieuld.cowatch.cowatch
 
 import android.content.Context
+import android.util.Log
 import com.hieuld.cowatch.display.PresentationDisplayManager
 import com.hieuld.cowatch.render.VideoRenderEngine
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +28,10 @@ object CoWatchSessionManager {
         if (targetDisplayIds.isEmpty()) return false
 
         val sessionId = UUID.randomUUID().toString()
+        Log.i(
+            TAG,
+            "Starting share session $sessionId host=$hostDisplayId targets=$targetDisplayIds anchor=$anchorPositionMs"
+        )
 
         val newSession = CoWatchSession(
             sessionId = sessionId,
@@ -51,6 +56,7 @@ object CoWatchSessionManager {
         val launchedDisplayIds = displayManager.show(targetDisplayIds)
 
         if (launchedDisplayIds.isEmpty()) {
+            Log.w(TAG, "Share session $sessionId failed because no presentation launched.")
             _session.value = null
             presentationDisplayManager?.dismissAll()
             presentationDisplayManager = null
@@ -59,6 +65,10 @@ object CoWatchSessionManager {
         }
 
         if (launchedDisplayIds != targetDisplayIds) {
+            Log.w(
+                TAG,
+                "Share session $sessionId launched partial displays=$launchedDisplayIds requested=$targetDisplayIds"
+            )
             val current = _session.value ?: newSession
             _session.value = current.copy(
                 participantDisplayIds = launchedDisplayIds,
@@ -76,6 +86,7 @@ object CoWatchSessionManager {
         if (displayId !in current.participantDisplayIds) return
         if (displayId in current.readyDisplayIds) return
 
+        Log.i(TAG, "Display $displayId ready for session ${current.sessionId}.")
         val updatedSession = current.copy(
             readyDisplayIds = current.readyDisplayIds + displayId
         )
@@ -88,6 +99,9 @@ object CoWatchSessionManager {
     }
 
     fun stopSharing() {
+        _session.value?.let { session ->
+            Log.i(TAG, "Stopping share session ${session.sessionId}.")
+        }
         presentationDisplayManager?.dismissAll()
         presentationDisplayManager = null
         onAllDisplaysReady = null
@@ -106,9 +120,11 @@ object CoWatchSessionManager {
         val current = _session.value ?: return
         if (displayId !in current.participantDisplayIds) return
 
+        Log.w(TAG, "Display $displayId removed from session ${current.sessionId}.")
         val remainingDisplayIds = current.participantDisplayIds - displayId
 
         if (remainingDisplayIds.isEmpty()) {
+            Log.w(TAG, "Ending session ${current.sessionId} because no participant displays remain.")
             onAllDisplaysReady = null
             _session.value = null
             return
@@ -123,10 +139,16 @@ object CoWatchSessionManager {
     private fun startSynchronizedPlayback(session: CoWatchSession) {
         if (session.status != CoWatchSessionStatus.PREPARING_SHARE) return
 
+        Log.i(
+            TAG,
+            "All displays ready for session ${session.sessionId}; resume at ${session.anchorPositionMs}."
+        )
         _session.value = session.copy(
             status = CoWatchSessionStatus.PLAYING_SHARED
         )
         onAllDisplaysReady?.invoke(session.anchorPositionMs)
     }
+
+    private const val TAG = "CoWatchSession"
 
 }

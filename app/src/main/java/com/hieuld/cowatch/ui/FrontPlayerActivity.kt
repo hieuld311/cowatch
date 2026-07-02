@@ -2,6 +2,7 @@ package com.hieuld.cowatch.ui
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -13,14 +14,14 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
-import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import com.hieuld.cowatch.display.DisplayInfo
 import com.hieuld.cowatch.display.DisplayRepository
+import com.hieuld.cowatch.media.VideoSource
+import com.hieuld.cowatch.playback.CoWatchPlaybackState
 import com.hieuld.cowatch.render.FrameFanoutRenderEngine
 import com.hieuld.cowatch.ui.player.FrontPlayerScreen
 import com.hieuld.cowatch.ui.player.hasAudioTrackInitializationFailure
@@ -39,14 +40,14 @@ class FrontPlayerActivity : ComponentActivity() {
     private val broadcastEnabledState = mutableStateOf(false)
     private val shareDialogVisibleState = mutableStateOf(false)
     private val fullscreenState = mutableStateOf(false)
-    private var selectedVideo: SelectedVideo? = null
+    private var selectedSource: VideoSource? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        selectedVideo = FrontPlayerContract.readVideo(intent)
+        selectedSource = FrontPlayerContract.readVideo(intent)
 
-        if (selectedVideo == null) {
+        if (selectedSource == null) {
             Toast.makeText(this, "Select a video first", Toast.LENGTH_SHORT).show()
             finish()
             return
@@ -83,7 +84,7 @@ class FrontPlayerActivity : ComponentActivity() {
         setIntent(intent)
 
         val video = FrontPlayerContract.readVideo(intent) ?: return
-        selectedVideo = video
+        selectedSource = video
 
         if (::player.isInitialized) {
             playVideo(video)
@@ -104,6 +105,36 @@ class FrontPlayerActivity : ComponentActivity() {
         player.setVideoSurface(renderEngine.inputSurface)
 
         player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                viewModel.setPlaybackState(
+                    when (playbackState) {
+                        Player.STATE_BUFFERING -> CoWatchPlaybackState.Preparing
+                        Player.STATE_READY -> {
+                            if (viewModel.session.value != null && player.isPlaying) {
+                                CoWatchPlaybackState.Sharing
+                            } else if (player.isPlaying) {
+                                CoWatchPlaybackState.Playing
+                            } else {
+                                CoWatchPlaybackState.Paused
+                            }
+                        }
+                        Player.STATE_ENDED -> CoWatchPlaybackState.Paused
+                        else -> CoWatchPlaybackState.Idle
+                    }
+                )
+            }
+
+            override fun onIsPlayingChanged(isPlaying: Boolean) {
+                val state = if (viewModel.session.value != null && isPlaying) {
+                    CoWatchPlaybackState.Sharing
+                } else if (isPlaying) {
+                    CoWatchPlaybackState.Playing
+                } else {
+                    CoWatchPlaybackState.Paused
+                }
+                viewModel.setPlaybackState(state)
+            }
+
             override fun onVideoSizeChanged(videoSize: VideoSize) {
                 renderEngine.setVideoSize(
                     width = videoSize.width,
@@ -113,8 +144,13 @@ class FrontPlayerActivity : ComponentActivity() {
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                viewModel.setPlaybackState(
+                    CoWatchPlaybackState.Error(error.message ?: error.errorCodeName)
+                )
+
                 if (audioFallbackApplied || !error.hasAudioTrackInitializationFailure()) return
 
+                Log.w(TAG, "AudioTrack failed; disabling audio track once.", error)
                 audioFallbackApplied = true
                 val resumePositionMs = player.currentPosition.coerceAtLeast(0L)
                 val resumePlayback = player.playWhenReady
@@ -128,25 +164,17 @@ class FrontPlayerActivity : ComponentActivity() {
             }
         })
 
-        selectedVideo?.let(::playVideo)
+        selectedSource?.let(::playVideo)
     }
 
-    private fun playVideo(video: SelectedVideo) {
+    private fun playVideo(source: VideoSource) {
+        viewModel.setPlaybackState(CoWatchPlaybackState.Preparing)
         audioFallbackApplied = false
         player.trackSelectionParameters = player.trackSelectionParameters
             .buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
             .build()
-        player.setMediaItem(
-            MediaItem.Builder()
-                .setUri("android.resource://${packageName}/${video.resId}")
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(video.title)
-                        .build()
-                )
-                .build()
-        )
+        player.setMediaItem(source.toMediaItem(packageName))
         player.prepare()
         player.play()
     }
@@ -171,6 +199,7 @@ class FrontPlayerActivity : ComponentActivity() {
         } else {
             shareDialogVisibleState.value = false
             viewModel.stopSharing()
+            updatePlaybackStateFromPlayer()
         }
     }
 
@@ -192,6 +221,7 @@ class FrontPlayerActivity : ComponentActivity() {
 
         val anchorPositionMs = player.currentPosition
         val wasPlayingBeforeShare = player.isPlaying
+        viewModel.setPlaybackState(CoWatchPlaybackState.SharingPreparing)
         player.pause()
 
         val sharingStarted = viewModel.startSharing(
@@ -205,11 +235,19 @@ class FrontPlayerActivity : ComponentActivity() {
                 if (wasPlayingBeforeShare) {
                     player.play()
                 }
+                viewModel.setPlaybackState(CoWatchPlaybackState.Sharing)
             }
         )
 
         if (!sharingStarted) {
             broadcastEnabledState.value = false
+            viewModel.setPlaybackState(
+                if (wasPlayingBeforeShare) {
+                    CoWatchPlaybackState.Playing
+                } else {
+                    CoWatchPlaybackState.Paused
+                }
+            )
 
             if (wasPlayingBeforeShare) {
                 player.play()
@@ -222,6 +260,7 @@ class FrontPlayerActivity : ComponentActivity() {
 
         if (viewModel.session.value == null) {
             broadcastEnabledState.value = false
+            updatePlaybackStateFromPlayer()
         }
     }
 
@@ -233,7 +272,23 @@ class FrontPlayerActivity : ComponentActivity() {
 
     private fun onBackToLibrary() {
         viewModel.stopSharing()
+        viewModel.setPlaybackState(CoWatchPlaybackState.Idle)
         finish()
+    }
+
+    private fun updatePlaybackStateFromPlayer() {
+        if (!::player.isInitialized) {
+            viewModel.setPlaybackState(CoWatchPlaybackState.Idle)
+            return
+        }
+
+        viewModel.setPlaybackState(
+            if (player.isPlaying) {
+                CoWatchPlaybackState.Playing
+            } else {
+                CoWatchPlaybackState.Paused
+            }
+        )
     }
 
     private fun applyFullscreenMode(fullscreen: Boolean) {
@@ -273,5 +328,9 @@ class FrontPlayerActivity : ComponentActivity() {
         }
 
         super.onDestroy()
+    }
+
+    companion object {
+        private const val TAG = "FrontPlayerActivity"
     }
 }

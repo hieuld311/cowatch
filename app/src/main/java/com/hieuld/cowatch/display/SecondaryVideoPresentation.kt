@@ -3,6 +3,7 @@ package com.hieuld.cowatch.display
 import android.app.Presentation
 import android.content.Context
 import android.os.Bundle
+import android.util.Log
 import android.view.Display
 import android.view.SurfaceHolder
 import android.view.SurfaceView
@@ -33,6 +34,7 @@ class SecondaryVideoPresentation(
                     width: Int,
                     height: Int
                 ) {
+                    Log.d(TAG, "Surface changed on display $displayId: ${width}x$height.")
                     val outputAdded = renderEngine.addOutput(
                         outputId = displayId,
                         surface = holder.surface,
@@ -41,13 +43,16 @@ class SecondaryVideoPresentation(
                     )
 
                     if (outputAdded) {
+                        Log.i(TAG, "Surface ready on display $displayId.")
                         onSurfaceReady(displayId)
                     } else {
+                        Log.w(TAG, "Surface rejected on display $displayId.")
                         onSurfaceDestroyed(displayId)
                     }
                 }
 
                 override fun surfaceDestroyed(holder: SurfaceHolder) {
+                    Log.i(TAG, "Surface destroyed on display $displayId.")
                     renderEngine.removeOutput(displayId)
                     onSurfaceDestroyed(displayId)
                 }
@@ -69,8 +74,13 @@ class SecondaryVideoPresentation(
     }
 
     override fun onStop() {
+        Log.i(TAG, "Presentation stopped on display $displayId.")
         renderEngine.removeOutput(displayId)
         onSurfaceDestroyed(displayId)
         super.onStop()
+    }
+
+    companion object {
+        private const val TAG = "SecondaryPresentation"
     }
 }

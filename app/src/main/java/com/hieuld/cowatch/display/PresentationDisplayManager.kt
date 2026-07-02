@@ -2,6 +2,7 @@ package com.hieuld.cowatch.display
 
 import android.content.Context
 import android.hardware.display.DisplayManager
+import android.util.Log
 import android.view.Display
 import com.hieuld.cowatch.render.VideoRenderEngine
 
@@ -22,7 +23,10 @@ class PresentationDisplayManager(
         val shownDisplayIds = mutableSetOf<Int>()
 
         displayIds.forEach { displayId ->
-            val display = displaysById[displayId] ?: return@forEach
+            val display = displaysById[displayId] ?: run {
+                Log.w(TAG, "Requested display $displayId is not available.")
+                return@forEach
+            }
             val presentation = SecondaryVideoPresentation(
                 context = context,
                 display = display,
@@ -35,7 +39,9 @@ class PresentationDisplayManager(
                 presentation.show()
                 presentations[displayId] = presentation
                 shownDisplayIds += displayId
+                Log.i(TAG, "Presentation shown on display $displayId.")
             } catch (_: RuntimeException) {
+                Log.e(TAG, "Failed to show presentation on display $displayId.")
                 presentation.dismiss()
             }
         }
@@ -44,6 +50,7 @@ class PresentationDisplayManager(
     }
 
     fun dismissAll() {
+        Log.i(TAG, "Dismissing ${presentations.size} presentation(s).")
         presentations.values.toList().forEach { presentation ->
             presentation.dismiss()
         }
@@ -58,5 +65,9 @@ class PresentationDisplayManager(
                     .toList()
             )
             .distinctBy { it.displayId }
+    }
+
+    companion object {
+        private const val TAG = "PresentationDisplay"
     }
 }

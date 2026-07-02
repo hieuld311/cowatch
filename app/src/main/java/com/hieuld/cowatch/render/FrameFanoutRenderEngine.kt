@@ -12,6 +12,8 @@ import android.opengl.Matrix
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
 import android.view.Surface
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
@@ -51,6 +53,7 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
         val ready = CountDownLatch(1)
         renderHandler.post {
             initGl()
+            Log.d(TAG, "Renderer initialized.")
             ready.countDown()
         }
         ready.await()
@@ -62,15 +65,24 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
         width: Int,
         height: Int
     ): Boolean {
-        if (released.get()) return false
+        if (released.get()) {
+            Log.w(TAG, "Reject output $outputId because renderer is released.")
+            return false
+        }
 
         var added = false
         runOnRenderThreadAndWait {
-            if (released.get()) return@runOnRenderThreadAndWait
+            if (released.get()) {
+                Log.w(TAG, "Reject output $outputId on render thread because renderer is released.")
+                return@runOnRenderThreadAndWait
+            }
 
             removeOutputOnRenderThread(outputId)
 
-            if (!surface.isValid) return@runOnRenderThreadAndWait
+            if (!surface.isValid) {
+                Log.w(TAG, "Reject output $outputId because surface is invalid.")
+                return@runOnRenderThreadAndWait
+            }
 
             val eglSurface = EGL14.eglCreateWindowSurface(
                 eglDisplay,
@@ -80,7 +92,10 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
                 0
             )
 
-            if (eglSurface == EGL14.EGL_NO_SURFACE) return@runOnRenderThreadAndWait
+            if (eglSurface == EGL14.EGL_NO_SURFACE) {
+                Log.e(TAG, "Failed to create EGL surface for output $outputId: ${eglError()}")
+                return@runOnRenderThreadAndWait
+            }
 
             outputs[outputId] = OutputTarget(
                 surface = surface,
@@ -90,6 +105,9 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
             )
             renderCurrentFrame()
             added = outputs.containsKey(outputId)
+            if (added) {
+                Log.i(TAG, "Added output $outputId ${width}x$height. outputCount=${outputs.size}")
+            }
         }
 
         return added
@@ -112,6 +130,10 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
             sourceVideoWidth = width
             sourceVideoHeight = height
             sourcePixelWidthHeightRatio = pixelWidthHeightRatio.takeIf { it > 0f } ?: 1f
+            Log.d(
+                TAG,
+                "Source video size ${sourceVideoWidth}x$sourceVideoHeight par=$sourcePixelWidthHeightRatio"
+            )
             renderCurrentFrame()
         }
     }
@@ -121,6 +143,7 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
 
         val done = CountDownLatch(1)
         renderHandler.post {
+            Log.i(TAG, "Releasing renderer. outputCount=${outputs.size}")
             outputs.keys.toList().forEach(::removeOutputOnRenderThread)
             inputSurface.release()
             inputSurfaceTexture.release()
@@ -149,6 +172,7 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
             EGL14.eglDestroyContext(eglDisplay, eglContext)
             EGL14.eglTerminate(eglDisplay)
 
+            Log.d(TAG, "Renderer released.")
             done.countDown()
         }
         done.await()
@@ -228,6 +252,7 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
     private fun renderCurrentFrame() {
         if (outputs.isEmpty()) return
 
+        val frameStartNanos = SystemClock.elapsedRealtimeNanos()
         GLES20.glUseProgram(program)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTextureId)
@@ -235,6 +260,7 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
 
         outputs.entries.toList().forEach { (outputId, target) ->
             if (!target.surface.isValid) {
+                Log.w(TAG, "Removing output $outputId because surface became invalid.")
                 removeOutputOnRenderThread(outputId)
                 return@forEach
             }
@@ -247,6 +273,7 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
             )
 
             if (!current) {
+                Log.e(TAG, "eglMakeCurrent failed for output $outputId: ${eglError()}")
                 removeOutputOnRenderThread(outputId)
                 return@forEach
             }
@@ -262,8 +289,18 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
             )
             drawFullScreenQuad()
             if (!EGL14.eglSwapBuffers(eglDisplay, target.eglSurface)) {
+                Log.e(TAG, "eglSwapBuffers failed for output $outputId: ${eglError()}")
                 removeOutputOnRenderThread(outputId)
             }
+        }
+
+        val renderDurationMs =
+            (SystemClock.elapsedRealtimeNanos() - frameStartNanos) / 1_000_000L
+        if (renderDurationMs > SLOW_FRAME_THRESHOLD_MS) {
+            Log.w(
+                TAG,
+                "Slow fanout frame ${renderDurationMs}ms. outputCount=${outputs.size}"
+            )
         }
     }
 
@@ -327,6 +364,7 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
         val target = outputs.remove(outputId) ?: return
         EGL14.eglMakeCurrent(eglDisplay, setupSurface, setupSurface, eglContext)
         EGL14.eglDestroySurface(eglDisplay, target.eglSurface)
+        Log.i(TAG, "Removed output $outputId. outputCount=${outputs.size}")
     }
 
     private fun runOnRenderThreadAndWait(block: () -> Unit) {
@@ -392,6 +430,10 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
         }
     }
 
+    private fun eglError(): String {
+        return "0x${EGL14.eglGetError().toString(16)}"
+    }
+
     private data class OutputTarget(
         val surface: Surface,
         val eglSurface: EGLSurface,
@@ -407,6 +449,8 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
     )
 
     companion object {
+        private const val TAG = "FrameFanoutRender"
+        private const val SLOW_FRAME_THRESHOLD_MS = 33L
         private const val STRIDE_BYTES = 4 * 4
 
         private val VERTEX_BUFFER = java.nio.ByteBuffer

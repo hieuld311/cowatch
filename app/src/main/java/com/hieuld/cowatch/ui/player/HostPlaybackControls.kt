@@ -25,6 +25,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,22 +71,48 @@ internal fun HostPlaybackControls(
     var controlsVisible by remember { mutableStateOf(true) }
     var interactionVersion by remember { mutableStateOf(0) }
 
+    fun normalizedDuration(): Long {
+        return player.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
+    }
+
+    fun refreshPlaybackSnapshot(updateSlider: Boolean) {
+        isPlaying = player.isPlaying
+        durationMs = normalizedDuration()
+        positionMs = player.currentPosition.coerceAtLeast(0L)
+        videoTitle = resolvePlayerTitle(player)
+
+        if (updateSlider && !isDragging) {
+            sliderPositionMs = positionMs
+        }
+    }
+
     fun showControls() {
+        refreshPlaybackSnapshot(updateSlider = !isDragging)
         controlsVisible = true
         interactionVersion += 1
     }
 
-    LaunchedEffect(player) {
-        while (true) {
-            isPlaying = player.isPlaying
-            durationMs = player.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
-            positionMs = player.currentPosition.coerceAtLeast(0L)
-            videoTitle = resolvePlayerTitle(player)
-
-            if (!isDragging) {
-                sliderPositionMs = positionMs
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                refreshPlaybackSnapshot(updateSlider = !isDragging)
             }
+        }
 
+        player.addListener(listener)
+        refreshPlaybackSnapshot(updateSlider = true)
+
+        onDispose {
+            player.removeListener(listener)
+        }
+    }
+
+    LaunchedEffect(player, controlsVisible, isPlaying, isDragging) {
+        if (!controlsVisible || !isPlaying || isDragging) return@LaunchedEffect
+
+        while (true) {
+            positionMs = player.currentPosition.coerceAtLeast(0L)
+            sliderPositionMs = positionMs
             delay(250L)
         }
     }
@@ -137,6 +164,7 @@ internal fun HostPlaybackControls(
                     },
                     onSeekFinished = {
                         player.seekTo(sliderPositionMs)
+                        positionMs = sliderPositionMs
                         isDragging = false
                         showControls()
                     },
@@ -182,7 +210,10 @@ internal fun HostPlaybackControls(
                             iconSize = 30.dp,
                             onClick = {
                                 showControls()
-                                player.seekTo((player.currentPosition - 5_000L).coerceAtLeast(0L))
+                                val target = (player.currentPosition - 5_000L).coerceAtLeast(0L)
+                                player.seekTo(target)
+                                positionMs = target
+                                sliderPositionMs = target
                             }
                         )
                         Spacer(modifier = Modifier.width(12.dp))
@@ -216,9 +247,11 @@ internal fun HostPlaybackControls(
                             onClick = {
                                 showControls()
                                 val target = player.currentPosition + 5_000L
-                                player.seekTo(
+                                val targetPosition =
                                     if (durationMs > 0L) target.coerceAtMost(durationMs) else target
-                                )
+                                player.seekTo(targetPosition)
+                                positionMs = targetPosition
+                                sliderPositionMs = targetPosition
                             }
                         )
                     }

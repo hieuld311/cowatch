@@ -112,16 +112,16 @@ private fun HostVideoSurface(
                         width: Int,
                         height: Int
                     ) {
-                        renderEngine.addOutput(
+                        renderEngine.addOutputAsync(
                             outputId = HOST_RENDER_OUTPUT_ID,
                             surface = holder.surface,
                             width = width,
                             height = height
-                        )
+                        ) { }
                     }
 
                     override fun surfaceDestroyed(holder: SurfaceHolder) {
-                        renderEngine.removeOutput(HOST_RENDER_OUTPUT_ID)
+                        renderEngine.removeOutputAsync(HOST_RENDER_OUTPUT_ID)
                     }
                 })
             }

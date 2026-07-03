@@ -14,7 +14,8 @@ enum class RawVideoThumbnailProfile(
     val height: Int
 ) {
     Rail(width = 640, height = 360),
-    Background(width = 1280, height = 720)
+//    Background(width = 1280, height = 720)
+    Background(width = 640, height = 360)
 }
 
 private data class CacheKey(
@@ -23,30 +24,36 @@ private data class CacheKey(
 )
 
 object RawVideoThumbnailCache {
+    private val cacheLock = Any()
+
     private val cache = object : LruCache<CacheKey, Bitmap>(32 * 1024) {
         override fun sizeOf(key: CacheKey, value: Bitmap): Int = value.byteCount / 1024
     }
 
-    @Synchronized
     fun getCached(
         resId: Int,
         profile: RawVideoThumbnailProfile = RawVideoThumbnailProfile.Rail
     ): Bitmap? {
-        return cache.get(CacheKey(resId = resId, profile = profile))
+        return synchronized(cacheLock) {
+            cache.get(CacheKey(resId = resId, profile = profile))
+        }
     }
 
-    @Synchronized
     fun getOrLoad(
         context: Context,
         video: RawVideo,
         profile: RawVideoThumbnailProfile = RawVideoThumbnailProfile.Rail
     ): Bitmap? {
         val cacheKey = CacheKey(resId = video.resId, profile = profile)
-        cache.get(cacheKey)?.let { return it }
+        synchronized(cacheLock) {
+            cache.get(cacheKey)
+        }?.let { return it }
 
+        // MediaMetadataRetriever can be slow; keep the cache lock out of this path.
         val bitmap = decodeThumbnail(context, video, profile) ?: return null
-        cache.put(cacheKey, bitmap)
-        return bitmap
+        return synchronized(cacheLock) {
+            cache.get(cacheKey) ?: bitmap.also { cache.put(cacheKey, it) }
+        }
     }
 
     private fun decodeThumbnail(

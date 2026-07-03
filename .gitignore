@@ -4,8 +4,6 @@
 # Keep this file visible to Git.
 !.gitignore
 
-# Keep project design notes visible to Git.
-!COWATCH_MULTIDISPLAY_MEDIA_CONCEPTS.md
 
 # Allow traversal into the Android app source tree.
 !app/

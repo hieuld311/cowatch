@@ -102,10 +102,11 @@ object CoWatchSessionManager {
         _session.value?.let { session ->
             Log.i(TAG, "Stopping share session ${session.sessionId}.")
         }
-        presentationDisplayManager?.dismissAll()
+        val displayManager = presentationDisplayManager
         presentationDisplayManager = null
         onAllDisplaysReady = null
         _session.value = null
+        displayManager?.dismissAll()
     }
 
     fun isSharing(): Boolean {

@@ -12,7 +12,21 @@ interface VideoRenderEngine {
         height: Int
     ): Boolean
 
+    fun addOutputAsync(
+        outputId: Int,
+        surface: Surface,
+        width: Int,
+        height: Int,
+        onResult: (Boolean) -> Unit
+    ) {
+        onResult(addOutput(outputId, surface, width, height))
+    }
+
     fun removeOutput(outputId: Int)
+
+    fun removeOutputAsync(outputId: Int) {
+        removeOutput(outputId)
+    }
 
     fun setVideoSize(
         width: Int,

@@ -12,12 +12,10 @@ class DisplayRepository(
 
     // Returns dynamic secondary-display candidates; display IDs are never hardcoded.
     fun getShareTargets(currentDisplayId: Int): List<DisplayInfo> {
-        val allDisplays = displayManager.displays
         val presentationDisplays =
             displayManager.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION)
 
-        return allDisplays
-            .plus(presentationDisplays.toList())
+        return presentationDisplays
             .distinctBy { it.displayId }
             .filter { it.displayId != currentDisplayId }
             .map {

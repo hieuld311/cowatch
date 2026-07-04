@@ -201,6 +201,10 @@ class FrontPlayerActivity : ComponentActivity() {
         lifecycleScope.launch {
             viewModel.session.collectLatest { session ->
                 broadcastEnabledState.value = session != null
+                if (session == null && ::player.isInitialized) {
+                    cancelPendingSharedStart()
+                    updatePlaybackStateFromPlayer()
+                }
             }
         }
     }
@@ -305,7 +309,13 @@ class FrontPlayerActivity : ComponentActivity() {
 
             delay(SHARED_START_PREROLL_MS)
 
-            if (!isActive || generation != sharedStartGeneration) return@launch
+            if (
+                !isActive ||
+                generation != sharedStartGeneration ||
+                viewModel.session.value == null
+            ) {
+                return@launch
+            }
 
             pendingSharedStartJob = null
             Log.i(TAG, "Starting shared playback at ${player.currentPosition}.")
@@ -385,6 +395,11 @@ class FrontPlayerActivity : ComponentActivity() {
 
     override fun onDestroy() {
         applyFullscreenMode(false)
+
+        if (::viewModel.isInitialized) {
+            viewModel.stopSharing()
+            viewModel.setPlaybackState(CoWatchPlaybackState.Idle)
+        }
 
         if (::player.isInitialized) {
             cancelPendingSharedStart()

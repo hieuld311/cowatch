@@ -19,8 +19,6 @@ import androidx.media3.common.Player
 import com.hieuld.cowatch.display.DisplayInfo
 import com.hieuld.cowatch.render.VideoRenderEngine
 
-private const val HOST_RENDER_OUTPUT_ID = Int.MIN_VALUE
-
 @Composable
 internal fun FrontPlayerScreen(
     player: Player,
@@ -113,7 +111,7 @@ private fun HostVideoSurface(
                         height: Int
                     ) {
                         renderEngine.addOutputAsync(
-                            outputId = HOST_RENDER_OUTPUT_ID,
+                            outputId = VideoRenderEngine.HOST_OUTPUT_ID,
                             surface = holder.surface,
                             width = width,
                             height = height
@@ -121,7 +119,7 @@ private fun HostVideoSurface(
                     }
 
                     override fun surfaceDestroyed(holder: SurfaceHolder) {
-                        renderEngine.removeOutputAsync(HOST_RENDER_OUTPUT_ID)
+                        renderEngine.removeOutputAsync(VideoRenderEngine.HOST_OUTPUT_ID)
                     }
                 })
             }

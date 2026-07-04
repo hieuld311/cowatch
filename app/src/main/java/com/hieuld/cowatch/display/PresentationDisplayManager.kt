@@ -32,7 +32,8 @@ class PresentationDisplayManager(
                 display = display,
                 renderEngine = renderEngine,
                 onSurfaceReady = onDisplayReady,
-                onSurfaceDestroyed = onDisplayRemoved
+                onSurfaceDestroyed = ::handlePresentationSurfaceDestroyed,
+                onCloseRequested = ::dismiss
             )
 
             try {
@@ -55,6 +56,17 @@ class PresentationDisplayManager(
             presentation.dismiss()
         }
         presentations.clear()
+    }
+
+    private fun dismiss(displayId: Int) {
+        val presentation = presentations.remove(displayId) ?: return
+        Log.i(TAG, "Dismissing presentation on display $displayId.")
+        presentation.dismiss()
+    }
+
+    private fun handlePresentationSurfaceDestroyed(displayId: Int) {
+        presentations.remove(displayId)
+        onDisplayRemoved(displayId)
     }
 
     private fun availableDisplays(): List<Display> {

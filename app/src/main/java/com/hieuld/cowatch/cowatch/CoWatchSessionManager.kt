@@ -126,15 +126,23 @@ object CoWatchSessionManager {
 
         if (remainingDisplayIds.isEmpty()) {
             Log.w(TAG, "Ending session ${current.sessionId} because no participant displays remain.")
+            val displayManager = presentationDisplayManager
+            presentationDisplayManager = null
             onAllDisplaysReady = null
             _session.value = null
+            displayManager?.dismissAll()
             return
         }
 
-        _session.value = current.copy(
+        val updatedSession = current.copy(
             participantDisplayIds = remainingDisplayIds,
             readyDisplayIds = current.readyDisplayIds - displayId
         )
+        _session.value = updatedSession
+
+        if (updatedSession.allDisplaysReady) {
+            startSynchronizedPlayback(updatedSession)
+        }
     }
 
     private fun startSynchronizedPlayback(session: CoWatchSession) {

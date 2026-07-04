@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.Looper
 import android.os.SystemClock
+import android.os.Trace
 import android.util.Log
 import android.view.Surface
 import java.util.concurrent.CountDownLatch
@@ -45,6 +46,7 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
 
     private val textureMatrix = FloatArray(16)
     private val outputs = linkedMapOf<Int, OutputTarget>()
+    private val frameOutputIds = ArrayList<Int>(EXPECTED_MAX_OUTPUTS)
     private var sourceVideoWidth = 0
     private var sourceVideoHeight = 0
     private var sourcePixelWidthHeightRatio = 1f
@@ -270,23 +272,63 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
     private fun renderCurrentFrame() {
         if (outputs.isEmpty()) return
 
-        val frameStartNanos = SystemClock.elapsedRealtimeNanos()
+        trace(TRACE_RENDER_FRAME) {
+            val frameStartNanos = SystemClock.elapsedRealtimeNanos()
+            prepareTextureProgram()
+            snapshotOutputIds()
+
+            try {
+                // All outputs must receive the same decoded frame; per-output skipping breaks sync.
+                renderHostOutput()
+                renderExternalOutputs()
+            } finally {
+                frameOutputIds.clear()
+            }
+
+            val renderDurationMs =
+                (SystemClock.elapsedRealtimeNanos() - frameStartNanos) / 1_000_000L
+            if (renderDurationMs > SLOW_FRAME_THRESHOLD_MS) {
+                Log.w(
+                    TAG,
+                    "Slow fanout frame ${renderDurationMs}ms. outputCount=${outputs.size}"
+                )
+            }
+        }
+    }
+
+    private fun prepareTextureProgram() {
         GLES20.glUseProgram(program)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTextureId)
         GLES20.glUniformMatrix4fv(uTexMatrixLocation, 1, false, textureMatrix, 0)
+    }
 
-        outputs.entries.toList().forEach { (outputId, target) ->
-            renderOutputFrame(outputId, target)
+    private fun snapshotOutputIds() {
+        frameOutputIds.clear()
+        outputs.keys.forEach(frameOutputIds::add)
+    }
+
+    private fun renderHostOutput() {
+        for (outputId in frameOutputIds) {
+            if (isHostOutput(outputId)) {
+                renderOutputById(outputId, TRACE_RENDER_HOST_OUTPUT)
+                return
+            }
         }
+    }
 
-        val renderDurationMs =
-            (SystemClock.elapsedRealtimeNanos() - frameStartNanos) / 1_000_000L
-        if (renderDurationMs > SLOW_FRAME_THRESHOLD_MS) {
-            Log.w(
-                TAG,
-                "Slow fanout frame ${renderDurationMs}ms. outputCount=${outputs.size}"
-            )
+    private fun renderExternalOutputs() {
+        for (outputId in frameOutputIds) {
+            if (!isHostOutput(outputId)) {
+                renderOutputById(outputId, TRACE_RENDER_EXTERNAL_OUTPUT)
+            }
+        }
+    }
+
+    private fun renderOutputById(outputId: Int, traceSection: String) {
+        val target = outputs[outputId] ?: return
+        trace(traceSection) {
+            renderOutputFrame(outputId, target)
         }
     }
 
@@ -337,7 +379,9 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
 
     private fun swapOutputBuffers(outputId: Int, target: OutputTarget): Long {
         val swapStartNanos = SystemClock.elapsedRealtimeNanos()
-        val swapped = EGL14.eglSwapBuffers(eglDisplay, target.eglSurface)
+        val swapped = trace(TRACE_SWAP_OUTPUT_BUFFERS) {
+            EGL14.eglSwapBuffers(eglDisplay, target.eglSurface)
+        }
         val swapDurationMs =
             (SystemClock.elapsedRealtimeNanos() - swapStartNanos) / 1_000_000L
 
@@ -359,10 +403,18 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
 
         Log.w(
             TAG,
-            "Slow output $outputId frame ${outputDurationMs}ms " +
+            "Slow ${outputRole(outputId)} output $outputId frame ${outputDurationMs}ms " +
                 "swap=${swapDurationMs}ms size=${target.width}x${target.height} " +
                 "outputCount=${outputs.size}"
         )
+    }
+
+    private fun isHostOutput(outputId: Int): Boolean {
+        return outputId == VideoRenderEngine.HOST_OUTPUT_ID
+    }
+
+    private fun outputRole(outputId: Int): String {
+        return if (isHostOutput(outputId)) "host" else "external"
     }
 
     private fun OutputTarget.fitViewport(): Viewport {
@@ -540,7 +592,16 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
         return "0x${EGL14.eglGetError().toString(16)}"
     }
 
-    private data class OutputTarget(
+    private inline fun <T> trace(sectionName: String, block: () -> T): T {
+        Trace.beginSection(sectionName)
+        return try {
+            block()
+        } finally {
+            Trace.endSection()
+        }
+    }
+
+    private class OutputTarget(
         val surface: Surface,
         val eglSurface: EGLSurface,
         val width: Int,
@@ -559,7 +620,12 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
         private const val SLOW_FRAME_THRESHOLD_MS = 33L
         private const val SLOW_OUTPUT_THRESHOLD_MS = 16L
         private const val COALESCED_FRAME_LOG_INTERVAL = 30
+        private const val EXPECTED_MAX_OUTPUTS = 5
         private const val STRIDE_BYTES = 4 * 4
+        private const val TRACE_RENDER_FRAME = "CoWatch.renderFrame"
+        private const val TRACE_RENDER_HOST_OUTPUT = "CoWatch.renderHostOutput"
+        private const val TRACE_RENDER_EXTERNAL_OUTPUT = "CoWatch.renderExternalOutput"
+        private const val TRACE_SWAP_OUTPUT_BUFFERS = "CoWatch.swapOutputBuffers"
 
         private val VERTEX_BUFFER = java.nio.ByteBuffer
             .allocateDirect(4 * STRIDE_BYTES)

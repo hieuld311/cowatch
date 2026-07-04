@@ -35,4 +35,8 @@ interface VideoRenderEngine {
     )
 
     fun release()
+
+    companion object {
+        const val HOST_OUTPUT_ID: Int = Int.MIN_VALUE
+    }
 }

@@ -27,7 +27,7 @@ internal fun VideoThumbnail(
     contentScale: ContentScale = ContentScale.Crop,
     thumbnailProfile: RawVideoThumbnailProfile = RawVideoThumbnailProfile.Rail
 ) {
-    val context = LocalContext.current
+    val context = LocalContext.current.applicationContext
     val thumbnail by produceState<Bitmap?>(
         initialValue = RawVideoThumbnailCache.getCached(video.resId, thumbnailProfile),
         key1 = video.resId,

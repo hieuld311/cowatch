@@ -2,22 +2,15 @@ package com.hieuld.cowatch.data.media.repository
 
 import android.content.Context
 import com.hieuld.cowatch.domain.media.AssetVideo
-import java.util.Locale
+import com.hieuld.cowatch.util.MediaFileTypes
 
 object AssetVideoRepository {
 
     // Exhibition media is bundled in APK assets; assetPath is the stable id used by UI, PiP, and player routing.
     fun listVideos(context: Context): List<AssetVideo> {
-        return context.assets
-            .listVideoAssetPaths()
-            .map { assetPath ->
-                val fileName = assetPath.substringAfterLast('/')
-                AssetVideo(
-                    assetPath = assetPath,
-                    fileName = fileName,
-                    title = fileName.substringBeforeLast('.').toVideoTitle()
-                )
-            }
+        return scanAssetMediaItems(context)
+            .filter { item -> item.type == AssetMediaType.Video }
+            .map { item -> item.toAssetVideo() }
             .sortedBy { it.title.lowercase() }
     }
 
@@ -26,17 +19,23 @@ object AssetVideoRepository {
         return listVideos(context).firstOrNull { it.assetPath == assetPath }
     }
 
+    private fun scanAssetMediaItems(context: Context): List<ScannedAssetMediaItem> {
+        return context.assets
+            .listAssetPaths()
+            .mapNotNull { assetPath -> assetPath.toScannedMediaItem() }
+    }
+
     // Recursively scan assets so production media can be grouped in folders without changing app code.
-    private fun android.content.res.AssetManager.listVideoAssetPaths(): List<String> {
+    private fun android.content.res.AssetManager.listAssetPaths(): List<String> {
         val result = mutableListOf<String>()
-        collectVideoAssetPaths(
+        collectAssetPaths(
             directory = "",
             result = result
         )
         return result
     }
 
-    private fun android.content.res.AssetManager.collectVideoAssetPaths(
+    private fun android.content.res.AssetManager.collectAssetPaths(
         directory: String,
         result: MutableList<String>
     ) {
@@ -45,21 +44,26 @@ object AssetVideoRepository {
             val path = if (directory.isBlank()) child else "$directory/$child"
             val nestedChildren = runCatching { list(path).orEmpty() }.getOrDefault(emptyArray())
             if (nestedChildren.isEmpty()) {
-                if (path.isSupportedVideoAsset()) {
-                    result += path
-                }
+                result += path
             } else {
-                collectVideoAssetPaths(path, result)
+                collectAssetPaths(path, result)
             }
         }
     }
 
-    private fun String.isSupportedVideoAsset(): Boolean {
-        val lowerName = lowercase(Locale.ROOT)
-        return lowerName.endsWith(".mp4") ||
-                lowerName.endsWith(".m4v") ||
-                lowerName.endsWith(".webm") ||
-                lowerName.endsWith(".mkv")
+    private fun String.toScannedMediaItem(): ScannedAssetMediaItem? {
+        val fileName = substringAfterLast('/')
+        val type = when {
+            MediaFileTypes.isSupportedVideoFileName(fileName) -> AssetMediaType.Video
+            else -> return null
+        }
+
+        return ScannedAssetMediaItem(
+            assetPath = this,
+            fileName = fileName,
+            title = fileName.substringBeforeLast('.').toVideoTitle(),
+            type = type
+        )
     }
 
     private fun String.toVideoTitle(): String {
@@ -70,5 +74,24 @@ object AssetVideoRepository {
                     if (char.isLowerCase()) char.titlecase() else char.toString()
                 }
             }
+    }
+
+    private fun ScannedAssetMediaItem.toAssetVideo(): AssetVideo {
+        return AssetVideo(
+            assetPath = assetPath,
+            fileName = fileName,
+            title = title
+        )
+    }
+
+    private data class ScannedAssetMediaItem(
+        val assetPath: String,
+        val fileName: String,
+        val title: String,
+        val type: AssetMediaType
+    )
+
+    private enum class AssetMediaType {
+        Video
     }
 }

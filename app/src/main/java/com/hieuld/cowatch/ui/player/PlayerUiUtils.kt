@@ -1,6 +1,8 @@
 package com.hieuld.cowatch.ui.player
 
 import androidx.media3.common.Player
+import com.hieuld.cowatch.ext.resolveDisplayTitle
+import com.hieuld.cowatch.util.formatDurationClock
 
 internal fun Throwable.hasAudioTrackInitializationFailure(): Boolean {
     var current: Throwable? = this
@@ -19,29 +21,9 @@ internal fun Throwable.hasAudioTrackInitializationFailure(): Boolean {
 }
 
 internal fun formatPlaybackTime(positionMs: Long): String {
-    val totalSeconds = (positionMs.coerceAtLeast(0L) / 1_000L)
-    val minutes = totalSeconds / 60L
-    val seconds = totalSeconds % 60L
-    return "%02d:%02d".format(minutes, seconds)
+    return formatDurationClock(positionMs)
 }
 
 internal fun resolvePlayerTitle(player: Player): String {
-    player.mediaMetadata.title
-        ?.toString()
-        ?.takeIf { it.isNotBlank() }
-        ?.let { return it }
-
-    val mediaItem = player.currentMediaItem
-    mediaItem?.mediaMetadata?.title
-        ?.toString()
-        ?.takeIf { it.isNotBlank() }
-        ?.let { return it }
-
-    mediaItem?.localConfiguration?.uri?.lastPathSegment
-        ?.substringAfterLast('/')
-        ?.substringBeforeLast('.')
-        ?.takeIf { it.isNotBlank() }
-        ?.let { return it }
-
-    return "Untitled video"
+    return player.resolveDisplayTitle()
 }

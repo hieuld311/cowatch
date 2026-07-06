@@ -8,9 +8,10 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.media3.common.C
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackParameters
+import com.hieuld.cowatch.ext.normalizedDurationMs
+import com.hieuld.cowatch.ext.safeCurrentPositionMs
 
 @Composable
 internal fun rememberPlaybackControlsState(player: Player): PlaybackControlsState {
@@ -22,9 +23,9 @@ internal class PlaybackControlsState(
 ) {
     var isPlaying by mutableStateOf(player.isPlaying)
         private set
-    var durationMs by mutableLongStateOf(player.normalizedDuration())
+    var durationMs by mutableLongStateOf(player.normalizedDurationMs)
         private set
-    var sliderPositionMs by mutableLongStateOf(player.currentPosition.coerceAtLeast(0L))
+    var sliderPositionMs by mutableLongStateOf(player.safeCurrentPositionMs)
         private set
     var videoTitle by mutableStateOf(resolvePlayerTitle(player))
         private set
@@ -42,12 +43,12 @@ internal class PlaybackControlsState(
 
     fun refresh(updateSlider: Boolean) {
         isPlaying = player.isPlaying
-        durationMs = player.normalizedDuration()
+        durationMs = player.normalizedDurationMs
         videoTitle = resolvePlayerTitle(player)
         playbackSpeed = player.playbackParameters.speed
 
         if (updateSlider && !isDragging) {
-            sliderPositionMs = player.currentPosition.coerceAtLeast(0L)
+            sliderPositionMs = player.safeCurrentPositionMs
         }
     }
 
@@ -64,7 +65,7 @@ internal class PlaybackControlsState(
     }
 
     fun updatePlaybackPosition() {
-        sliderPositionMs = player.currentPosition.coerceAtLeast(0L)
+        sliderPositionMs = player.safeCurrentPositionMs
     }
 
     fun previewSeek(positionMs: Long) {
@@ -88,7 +89,7 @@ internal class PlaybackControlsState(
 
     fun seekBack() {
         showControls()
-        val target = (player.currentPosition - SEEK_STEP_MS).coerceAtLeast(0L)
+        val target = (player.safeCurrentPositionMs - SEEK_STEP_MS).coerceAtLeast(0L)
         player.seekTo(target)
         sliderPositionMs = target
     }
@@ -104,7 +105,7 @@ internal class PlaybackControlsState(
 
     fun seekForward() {
         showControls()
-        val target = player.currentPosition + SEEK_STEP_MS
+        val target = player.safeCurrentPositionMs + SEEK_STEP_MS
         val targetPosition = if (durationMs > 0L) {
             target.coerceAtMost(durationMs)
         } else {
@@ -112,10 +113,6 @@ internal class PlaybackControlsState(
         }
         player.seekTo(targetPosition)
         sliderPositionMs = targetPosition
-    }
-
-    private fun Player.normalizedDuration(): Long {
-        return duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
     }
 
     companion object {

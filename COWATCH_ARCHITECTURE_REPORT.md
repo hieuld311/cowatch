@@ -4,6 +4,8 @@
 
 CoWatch is a local Android Automotive exhibition player. It is designed for one host playback session, an in-app library, app-scoped PiP, and local shared display output through Android `Presentation` windows.
 
+The current implementation stays Kotlin + Jetpack Compose. It intentionally does not use XML UI or dependency injection.
+
 Out of scope by current design:
 
 - System PiP API
@@ -48,13 +50,16 @@ flowchart TD
 | `domain/media` | Stable media identity: `AssetVideo`, `VideoSource.Asset`. |
 | `data/media/repository` | Asset catalog scanning. |
 | `data/media/provider` | Thumbnail extraction and thumbnail cache. |
+| `data/provider` | Provider boundaries such as driving restriction state. |
 | `domain/sharing` | Share-session state model. |
+| `ext` | Media3 extension helpers adapted from the reference app's playback-state utilities. |
 | `session` | Long-lived app playback/share controllers. |
 | `render` | One decoded video frame fanout to local surfaces. |
 | `display/presentation` | Android `Presentation` windows for external displays. |
 | `ui` | Activity shell and navigation contract. |
 | `ui/library` | Library screen, rail, thumbnails, in-app PiP surface. |
 | `ui/player` | Fullscreen player surface, controls, seekbar, share dialog. |
+| `util` | Small reusable helpers currently used by the app: file type checks and time formatting. |
 | `viewmodel` | Activity-facing UI state owners. |
 
 The intended dependency direction is:
@@ -63,9 +68,30 @@ The intended dependency direction is:
 ui -> viewmodel -> session/data/domain
 session -> render/display/domain
 data -> domain
+ext/util -> framework only
 ```
 
 The render engine remains a first-class package because it is performance-critical infrastructure, not a UI helper.
+
+## 3.1 Reference App Reuse
+
+The inspected reference app under `D:\A.discere\Mobile\media` is used as an architecture reference, not a direct import.
+
+Reused now:
+
+- Small playback helper pattern: adapted from `PlaybackStateExt` into Media3 `Player` extensions.
+- Small utility pattern: time formatting and media file extension checks.
+- Provider boundary pattern: `DrivingRestrictionProvider` exists without pulling `android.car` APIs into the build yet.
+
+Deferred:
+
+- `MediaService`
+- `MediaLibrary`
+- `MediaDatabaseHelper`
+- Preference persistence helpers
+- Binder-safe bitmap payload compression
+
+These may be required for AAOS system media integration later, but they are intentionally not active in the current local exhibition player. Adding them now would introduce MediaBrowser/MediaSession lifecycle cost before the product requires it.
 
 ## 4. Asset Media Model
 
@@ -81,6 +107,14 @@ The render engine remains a first-class package because it is performance-critic
 - `.m4v`
 - `.webm`
 - `.mkv`
+
+The repository follows the reference app's catalog lesson:
+
+```text
+scan asset paths -> normalize scanned media item -> filter video type -> expose AssetVideo
+```
+
+This keeps raw asset traversal out of the ViewModel and Compose UI. The UI only receives stable `AssetVideo` items.
 
 `VideoSource.Asset` converts the selected asset into a Media3 item using:
 
@@ -228,6 +262,7 @@ For long-running exhibition devices:
 - Profile on real target hardware before raising thumbnail resolution.
 - Treat display ids as dynamic.
 - Treat `Presentation` surface creation as asynchronous and fallible.
+- Keep AAOS `MediaService` integration out of the runtime until system media-center/browser support is required.
 
 ## 12. Review Checklist
 
@@ -243,3 +278,7 @@ For long-running exhibition devices:
 - [x] PiP and fullscreen surfaces use separate output ids.
 - [x] Shared displays are passive render outputs.
 - [x] No MediaSession or background service is required for the current exhibition scope.
+- [x] Compose remains the UI stack; no XML UI rewrite is active.
+- [x] No dependency injection framework is used.
+- [x] AAOS MediaService/MediaLibrary/MediaDatabaseHelper path is documented but deferred.
+- [x] Asset scanning is normalized before the library UI receives display items.

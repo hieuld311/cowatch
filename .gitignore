@@ -1,14 +1,21 @@
-# Ignore everything by default.
-*
+# Gradle / Android build outputs
+.gradle/
+build/
+*/build/
 
-# Keep this file visible to Git.
-!.gitignore
+# IDE
+.idea/
+*.iml
 
+# Local config
+local.properties
 
-# Allow traversal to Android resources.
-!app/
-!app/src/
-!app/src/main/
+# Logs
+*.log
 
+# OS files
+.DS_Store
+Thumbs.db
+
+# Ignore bundled videos
 app/src/main/assets/*.mp4
-

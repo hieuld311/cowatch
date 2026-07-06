@@ -1,4 +1,4 @@
-package com.hieuld.cowatch.cowatch
+package com.hieuld.cowatch.domain.sharing
 
 enum class CoWatchSessionStatus {
     PREPARING_SHARE,

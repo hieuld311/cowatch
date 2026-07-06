@@ -1,4 +1,4 @@
-package com.hieuld.cowatch.display
+package com.hieuld.cowatch.display.presentation
 
 import android.content.Context
 import android.hardware.display.DisplayManager

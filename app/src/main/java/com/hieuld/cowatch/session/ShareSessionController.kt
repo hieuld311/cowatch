@@ -1,15 +1,17 @@
-package com.hieuld.cowatch.cowatch
+package com.hieuld.cowatch.session
 
 import android.content.Context
 import android.util.Log
-import com.hieuld.cowatch.display.PresentationDisplayManager
+import com.hieuld.cowatch.display.presentation.PresentationDisplayManager
+import com.hieuld.cowatch.domain.sharing.CoWatchSession
+import com.hieuld.cowatch.domain.sharing.CoWatchSessionStatus
 import com.hieuld.cowatch.render.VideoRenderEngine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import java.util.UUID
 
-object CoWatchSessionManager {
+object ShareSessionController {
 
     private val _session = MutableStateFlow<CoWatchSession?>(null)
     val session: StateFlow<CoWatchSession?> = _session.asStateFlow()
@@ -27,6 +29,7 @@ object CoWatchSessionManager {
     ): Boolean {
         if (targetDisplayIds.isEmpty()) return false
 
+        // Share startup anchors the single decoder before presentations attach their render outputs.
         val sessionId = UUID.randomUUID().toString()
         Log.i(
             TAG,
@@ -82,6 +85,7 @@ object CoWatchSessionManager {
     fun markDisplayReady(displayId: Int) {
         val current = _session.value ?: return
 
+        // A display is ready only after its Presentation surface is accepted by the EGL fanout renderer.
         if (current.status != CoWatchSessionStatus.PREPARING_SHARE) return
         if (displayId !in current.participantDisplayIds) return
         if (displayId in current.readyDisplayIds) return
@@ -148,6 +152,7 @@ object CoWatchSessionManager {
     private fun startSynchronizedPlayback(session: CoWatchSession) {
         if (session.status != CoWatchSessionStatus.PREPARING_SHARE) return
 
+        // All outputs are attached; now the host resumes the one player at the saved anchor position.
         Log.i(
             TAG,
             "All displays ready for session ${session.sessionId}; resume at ${session.anchorPositionMs}."

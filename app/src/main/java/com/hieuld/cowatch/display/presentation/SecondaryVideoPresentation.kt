@@ -1,4 +1,4 @@
-package com.hieuld.cowatch.display
+package com.hieuld.cowatch.display.presentation
 
 import android.app.Presentation
 import android.content.Context
@@ -38,6 +38,7 @@ class SecondaryVideoPresentation(
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Shared display video is full-screen; only close/release control is shown on top.
         val surfaceView = SurfaceView(context).apply {
             holder.addCallback(object : SurfaceHolder.Callback {
                 override fun surfaceCreated(holder: SurfaceHolder) = Unit
@@ -98,10 +99,12 @@ class SecondaryVideoPresentation(
                         }
                     },
                     FrameLayout.LayoutParams(
+                        // 64dp hit target remains usable on rear/dashboard displays at automotive density.
                         64.dpToPx(),
                         64.dpToPx(),
                         Gravity.TOP or Gravity.END
                     ).apply {
+                        // Match the front-player top-right close padding for consistent spatial placement.
                         topMargin = 12.dpToPx()
                         marginEnd = 12.dpToPx()
                     }

@@ -12,24 +12,30 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
-import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
-import com.hieuld.cowatch.display.DisplayInfo
-import com.hieuld.cowatch.display.DisplayRepository
-import com.hieuld.cowatch.media.VideoSource
-import com.hieuld.cowatch.playback.CoWatchPlaybackState
+import com.hieuld.cowatch.data.display.repository.DisplayRepository
+import com.hieuld.cowatch.domain.display.DisplayInfo
+import com.hieuld.cowatch.domain.media.VideoSource
+import com.hieuld.cowatch.domain.playback.CoWatchPlaybackState
+import com.hieuld.cowatch.domain.sharing.CoWatchSessionStatus
 import com.hieuld.cowatch.render.FrameFanoutRenderEngine
+import com.hieuld.cowatch.session.AppPlaybackSession
+import com.hieuld.cowatch.ui.VideoLibraryActivity
+import com.hieuld.cowatch.ui.FrontPlayerContract
 import com.hieuld.cowatch.ui.player.FrontPlayerScreen
 import com.hieuld.cowatch.ui.player.hasAudioTrackInitializationFailure
+import com.hieuld.cowatch.ui.theme.CoWatchTheme
+import com.hieuld.cowatch.viewmodel.FrontPlayerViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlin.math.abs
 
 class FrontPlayerActivity : ComponentActivity() {
 
@@ -42,6 +48,7 @@ class FrontPlayerActivity : ComponentActivity() {
     private var pendingSharedStartJob: Job? = null
     private var sharedStartGeneration = 0
     private var resumeAfterShareDialogCancel = false
+    private var keepPlaybackForInAppPip = false
 
     private val broadcastEnabledState = mutableStateOf(false)
     private val shareDialogVisibleState = mutableStateOf(false)
@@ -50,7 +57,7 @@ class FrontPlayerActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val source = FrontPlayerContract.readVideo(intent)
+        val source = FrontPlayerContract.readVideo(intent) as? VideoSource.Asset
 
         if (source == null) {
             Toast.makeText(this, "Select a video first", Toast.LENGTH_SHORT).show()
@@ -60,7 +67,7 @@ class FrontPlayerActivity : ComponentActivity() {
 
         viewModel = ViewModelProvider(this)[FrontPlayerViewModel::class.java]
         displayRepository = DisplayRepository(this)
-        renderEngine = FrameFanoutRenderEngine()
+        renderEngine = AppPlaybackSession.getRenderEngine()
 
         setupPlayer(source)
         observeShareSession()
@@ -77,7 +84,8 @@ class FrontPlayerActivity : ComponentActivity() {
                     onBroadcastCheckedChange = ::onBroadcastCheckedChange,
                     onShareDialogDismiss = ::onShareDialogDismissedWithoutSharing,
                     onStartSharing = ::onStartSharing,
-                    onBackClick = ::onBackToLibrary
+                    onBackClick = ::onBackToLibrary,
+                    onPictureInPictureClick = ::onInAppPipClick
                 )
             }
         }
@@ -87,85 +95,79 @@ class FrontPlayerActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
 
-        val video = FrontPlayerContract.readVideo(intent) ?: return
+        val video = FrontPlayerContract.readVideo(intent) as? VideoSource.Asset ?: return
 
         if (::player.isInitialized) {
             playVideo(video)
         }
     }
 
-    private fun setupPlayer(source: VideoSource) {
-        player = ExoPlayer.Builder(this).build().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(C.USAGE_MEDIA)
-                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-                    .build(),
-                true
-            )
-            volume = 1f
-        }
-        player.setVideoSurface(renderEngine.inputSurface)
+    private fun setupPlayer(source: VideoSource.Asset) {
+        player = AppPlaybackSession.getPlayer(this)
+        AppPlaybackSession.attachRenderEngine(renderEngine)
 
-        player.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                when (playbackState) {
-                    Player.STATE_BUFFERING -> {
-                        viewModel.setPlaybackState(CoWatchPlaybackState.Preparing)
-                    }
-                    Player.STATE_READY,
-                    Player.STATE_ENDED -> updatePlaybackStateFromPlayer()
-                    else -> viewModel.setPlaybackState(CoWatchPlaybackState.Idle)
-                }
-            }
-
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                updatePlaybackStateFromPlayer()
-            }
-
-            override fun onVideoSizeChanged(videoSize: VideoSize) {
-                renderEngine.setVideoSize(
-                    width = videoSize.width,
-                    height = videoSize.height,
-                    pixelWidthHeightRatio = videoSize.pixelWidthHeightRatio
-                )
-            }
-
-            override fun onPlayerError(error: PlaybackException) {
-                viewModel.setPlaybackState(
-                    CoWatchPlaybackState.Error(error.message ?: error.errorCodeName)
-                )
-
-                if (audioFallbackApplied || !error.hasAudioTrackInitializationFailure()) return
-
-                Log.w(TAG, "AudioTrack failed; disabling audio track once.", error)
-                audioFallbackApplied = true
-                val resumePositionMs = player.currentPosition.coerceAtLeast(0L)
-                val resumePlayback = player.playWhenReady
-                player.trackSelectionParameters = player.trackSelectionParameters
-                    .buildUpon()
-                    .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
-                    .build()
-                player.seekTo(resumePositionMs)
-                player.prepare()
-                player.playWhenReady = resumePlayback
-            }
-        })
-
-        playVideo(source)
+        player.addListener(playerListener)
+        applyVideoSize(player.videoSize)
+        AppPlaybackSession.showFullscreen(this, source)
+        updatePlaybackStateFromPlayer()
     }
 
-    private fun playVideo(source: VideoSource) {
+    private val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            when (playbackState) {
+                Player.STATE_BUFFERING -> {
+                    viewModel.setPlaybackState(CoWatchPlaybackState.Preparing)
+                }
+                Player.STATE_READY,
+                Player.STATE_ENDED -> updatePlaybackStateFromPlayer()
+                else -> viewModel.setPlaybackState(CoWatchPlaybackState.Idle)
+            }
+        }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            updatePlaybackStateFromPlayer()
+        }
+
+        override fun onVideoSizeChanged(videoSize: VideoSize) {
+            applyVideoSize(videoSize)
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            viewModel.setPlaybackState(
+                CoWatchPlaybackState.Error(error.message ?: error.errorCodeName)
+            )
+
+            if (audioFallbackApplied || !error.hasAudioTrackInitializationFailure()) return
+
+            Log.w(TAG, "AudioTrack failed; disabling audio track once.", error)
+            audioFallbackApplied = true
+            val resumePositionMs = player.currentPosition.coerceAtLeast(0L)
+            val resumePlayback = player.playWhenReady
+            player.trackSelectionParameters = player.trackSelectionParameters
+                .buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, true)
+                .build()
+            player.seekTo(resumePositionMs)
+            player.prepare()
+            player.playWhenReady = resumePlayback
+        }
+    }
+
+    private fun playVideo(source: VideoSource.Asset) {
         cancelPendingSharedStart()
         viewModel.setPlaybackState(CoWatchPlaybackState.Preparing)
         audioFallbackApplied = false
-        player.trackSelectionParameters = player.trackSelectionParameters
-            .buildUpon()
-            .setTrackTypeDisabled(C.TRACK_TYPE_AUDIO, false)
-            .build()
-        player.setMediaItem(source.toMediaItem(packageName))
-        player.prepare()
-        player.play()
+        AppPlaybackSession.play(this, source)
+    }
+
+    private fun applyVideoSize(videoSize: VideoSize) {
+        if (videoSize.width <= 0 || videoSize.height <= 0) return
+
+        renderEngine.setVideoSize(
+            width = videoSize.width,
+            height = videoSize.height,
+            pixelWidthHeightRatio = videoSize.pixelWidthHeightRatio
+        )
     }
 
     private fun onBroadcastCheckedChange(checked: Boolean) {
@@ -220,6 +222,7 @@ class FrontPlayerActivity : ComponentActivity() {
 
         val anchorPositionMs = player.currentPosition
         val wasPlayingBeforeShare = player.isPlaying
+        // Freeze the single decoder until all selected Presentation surfaces are attached.
         pauseAtShareAnchor(anchorPositionMs)
         viewModel.setPlaybackState(CoWatchPlaybackState.SharingPreparing)
         Log.i(
@@ -259,6 +262,28 @@ class FrontPlayerActivity : ComponentActivity() {
         cancelPendingSharedStart()
         viewModel.stopSharing()
         viewModel.setPlaybackState(CoWatchPlaybackState.Idle)
+        AppPlaybackSession.stop()
+        finish()
+    }
+
+    private fun onInAppPipClick() {
+        if (viewModel.session.value?.status == CoWatchSessionStatus.PREPARING_SHARE) {
+            Toast.makeText(
+                this,
+                "Wait until shared playback starts",
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
+        // PiP is app-scoped: keep player/render session alive while returning to the library.
+        keepPlaybackForInAppPip = true
+        cancelPendingSharedStart()
+        clearPendingShareDialogResume()
+        clearShareDialog()
+        AppPlaybackSession.enterInAppPip()
+        applyFullscreenMode(false)
+        startActivity(Intent(this, VideoLibraryActivity::class.java))
         finish()
     }
 
@@ -288,11 +313,12 @@ class FrontPlayerActivity : ComponentActivity() {
         val generation = ++sharedStartGeneration
         pendingSharedStartJob?.cancel()
         pendingSharedStartJob = lifecycleScope.launch {
+            // All outputs are registered; seek once to the share anchor before releasing playback.
             Log.i(TAG, "All share displays ready; priming player at $startPositionMs.")
             player.playWhenReady = false
             player.pause()
 
-            if (kotlin.math.abs(player.currentPosition - startPositionMs) > SHARED_START_SEEK_TOLERANCE_MS) {
+            if (abs(player.currentPosition - startPositionMs) > SHARED_START_SEEK_TOLERANCE_MS) {
                 player.seekTo(startPositionMs)
             }
 
@@ -397,17 +423,27 @@ class FrontPlayerActivity : ComponentActivity() {
         applyFullscreenMode(false)
 
         if (::viewModel.isInitialized) {
-            viewModel.stopSharing()
-            viewModel.setPlaybackState(CoWatchPlaybackState.Idle)
+            if (!keepPlaybackForInAppPip) {
+                viewModel.stopSharing()
+                viewModel.setPlaybackState(CoWatchPlaybackState.Idle)
+            }
         }
 
         if (::player.isInitialized) {
             cancelPendingSharedStart()
-            player.clearVideoSurface()
-            player.release()
+            player.removeListener(playerListener)
+            if (!keepPlaybackForInAppPip && !isChangingConfigurations) {
+                AppPlaybackSession.detachRenderEngine(renderEngine)
+                AppPlaybackSession.stop()
+            }
         }
 
-        if (::renderEngine.isInitialized) {
+        if (
+            ::renderEngine.isInitialized &&
+            !keepPlaybackForInAppPip &&
+            !isChangingConfigurations &&
+            !::player.isInitialized
+        ) {
             renderEngine.release()
         }
 

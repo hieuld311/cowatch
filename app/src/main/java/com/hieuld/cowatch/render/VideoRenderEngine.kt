@@ -3,6 +3,7 @@ package com.hieuld.cowatch.render
 import android.view.Surface
 
 interface VideoRenderEngine {
+    // ExoPlayer renders into this single input surface; the engine fans frames out to registered outputs.
     val inputSurface: Surface
 
     fun addOutput(
@@ -37,6 +38,8 @@ interface VideoRenderEngine {
     fun release()
 
     companion object {
+        // Fullscreen host and library PiP use separate IDs so SurfaceView teardown cannot remove the wrong output.
         const val HOST_OUTPUT_ID: Int = Int.MIN_VALUE
+        const val LIBRARY_PIP_OUTPUT_ID: Int = Int.MIN_VALUE + 1
     }
 }

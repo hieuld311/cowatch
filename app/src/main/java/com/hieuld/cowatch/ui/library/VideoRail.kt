@@ -20,18 +20,18 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntOffset
-import com.hieuld.cowatch.media.RawVideo
+import com.hieuld.cowatch.domain.media.AssetVideo
 import kotlin.math.max
 import kotlin.math.roundToInt
 
 @Composable
 internal fun VideoRail(
-    videos: List<RawVideo>,
+    videos: List<AssetVideo>,
     focusedIndex: Int,
     onFocusChanged: (Int) -> Unit,
     onFocusPreviewChanged: (Int) -> Unit,
     onFocusPreviewCleared: () -> Unit,
-    onVideoSelected: (RawVideo) -> Unit
+    onVideoSelected: (AssetVideo) -> Unit
 ) {
     var dragOffsetPx by remember { mutableFloatStateOf(0f) }
     var containerWidthPx by remember { mutableIntStateOf(1) }
@@ -99,7 +99,8 @@ internal fun VideoRail(
 
         cards.forEach { card ->
             val video = videos[card.index]
-            key(video.resId) {
+            // assetPath is the stable identity for card reuse and thumbnail cache coherence.
+            key(video.assetPath) {
                 VisibleRailCard(
                     video = video,
                     card = card,
@@ -116,13 +117,13 @@ internal fun VideoRail(
 
 @Composable
 private fun VisibleRailCard(
-    video: RawVideo,
+    video: AssetVideo,
     card: RailCardLayout,
     metrics: RailMetrics,
     focusedIndex: Int,
     density: androidx.compose.ui.unit.Density,
     onFocusChanged: (Int) -> Unit,
-    onVideoSelected: (RawVideo) -> Unit
+    onVideoSelected: (AssetVideo) -> Unit
 ) {
     val selected = card.index == focusedIndex
     val widthPx = metrics.sideWidthPx +

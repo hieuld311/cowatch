@@ -275,11 +275,12 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
         trace(TRACE_RENDER_FRAME) {
             val frameStartNanos = SystemClock.elapsedRealtimeNanos()
             prepareTextureProgram()
+            // Snapshot output IDs once per frame so add/remove work cannot mutate this render pass.
             snapshotOutputIds()
 
             try {
                 // All outputs must receive the same decoded frame; per-output skipping breaks sync.
-                renderHostOutput()
+                renderHostOutputs()
                 renderExternalOutputs()
             } finally {
                 frameOutputIds.clear()
@@ -308,16 +309,17 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
         outputs.keys.forEach(frameOutputIds::add)
     }
 
-    private fun renderHostOutput() {
+    private fun renderHostOutputs() {
+        // Host-family outputs are rendered first to keep front screen and in-app PiP visually responsive.
         for (outputId in frameOutputIds) {
             if (isHostOutput(outputId)) {
                 renderOutputById(outputId, TRACE_RENDER_HOST_OUTPUT)
-                return
             }
         }
     }
 
     private fun renderExternalOutputs() {
+        // External outputs are passive Presentation surfaces receiving the same decoded frame.
         for (outputId in frameOutputIds) {
             if (!isHostOutput(outputId)) {
                 renderOutputById(outputId, TRACE_RENDER_EXTERNAL_OUTPUT)
@@ -410,7 +412,8 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
     }
 
     private fun isHostOutput(outputId: Int): Boolean {
-        return outputId == VideoRenderEngine.HOST_OUTPUT_ID
+        return outputId == VideoRenderEngine.HOST_OUTPUT_ID ||
+                outputId == VideoRenderEngine.LIBRARY_PIP_OUTPUT_ID
     }
 
     private fun outputRole(outputId: Int): String {
@@ -426,6 +429,7 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
             (sourceVideoWidth * sourcePixelWidthHeightRatio) / sourceVideoHeight
         val outputAspectRatio = width.toFloat() / height.toFloat()
 
+        // Preserve source aspect ratio per surface; unused pixels stay black instead of stretching video.
         val fittedWidth: Int
         val fittedHeight: Int
 
@@ -491,6 +495,7 @@ class FrameFanoutRenderEngine : VideoRenderEngine {
             return false
         }
 
+        // Re-registering the same output ID replaces its EGL surface, matching SurfaceView recreation.
         removeOutputOnRenderThread(outputId)
 
         if (!surface.isValid) {

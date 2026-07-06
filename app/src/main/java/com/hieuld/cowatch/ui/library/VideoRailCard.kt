@@ -1,5 +1,6 @@
 package com.hieuld.cowatch.ui.library
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -12,14 +13,11 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -29,11 +27,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.hieuld.cowatch.R
-import com.hieuld.cowatch.media.RawVideo
+import com.hieuld.cowatch.domain.media.AssetVideo
 
 @Composable
 internal fun VideoRailCard(
-    video: RawVideo,
+    video: AssetVideo,
     selected: Boolean,
     width: Dp,
     thumbnailHeight: Dp,
@@ -49,6 +47,7 @@ internal fun VideoRailCard(
         val thumbnailModifier = Modifier
             .fillMaxWidth()
             .height(thumbnailHeight)
+            // Placeholder color and fixed thumbnail height prevent layout jumps while assets decode.
             .background(ExplorerPlaceholderColor)
             .then(
                 if (selected) {
@@ -75,17 +74,15 @@ internal fun VideoRailCard(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(10.dp)
-                        .size(24.dp)
-                        .clip(CircleShape)
-                        .background(Color.White)
+                        // 44dp icon footprint keeps selected cards stable and matches the original drawable size.
+                        .size(44.dp)
                 ) {
-                    Icon(
+                    Image(
                         painter = painterResource(R.drawable.ico_media_play_l_p),
                         contentDescription = "Play",
-                        tint = Color.Unspecified,
                         modifier = Modifier
                             .align(Alignment.Center)
-                            .size(18.dp)
+                            .size(44.dp)
                     )
                 }
             }

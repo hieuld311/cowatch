@@ -11,25 +11,26 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import com.hieuld.cowatch.media.RawVideo
-import com.hieuld.cowatch.media.RawVideoThumbnailProfile
+import com.hieuld.cowatch.domain.media.AssetVideo
+import com.hieuld.cowatch.data.media.provider.AssetVideoThumbnailProfile
 
 @Composable
 internal fun ExplorerBackground(
-    video: RawVideo?,
+    video: AssetVideo?,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier.background(ExplorerPlaceholderColor)
     ) {
         if (video != null) {
-            key(video.resId) {
+            // Background follows committed focus only, keeping larger thumbnail decode out of drag preview.
+            key(video.assetPath) {
                 VideoThumbnail(
                     video = video,
                     contentDescription = null,
                     modifier = Modifier.fillMaxSize(),
                     contentScale = ContentScale.Crop,
-                    thumbnailProfile = RawVideoThumbnailProfile.Background
+                    thumbnailProfile = AssetVideoThumbnailProfile.Background
                 )
             }
         } else {

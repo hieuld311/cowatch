@@ -1,4 +1,4 @@
-package com.hieuld.cowatch.ui
+package com.hieuld.cowatch.ui.theme
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography

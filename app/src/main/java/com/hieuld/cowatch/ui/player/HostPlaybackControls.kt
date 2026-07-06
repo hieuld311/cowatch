@@ -3,6 +3,7 @@ package com.hieuld.cowatch.ui.player
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -47,6 +48,7 @@ internal fun HostPlaybackControls(
     player: Player,
     broadcastChecked: Boolean,
     onBroadcastCheckedChange: (Boolean) -> Unit,
+    onPictureInPictureClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val controlsState = rememberPlaybackControlsState(player)
@@ -116,8 +118,10 @@ internal fun HostPlaybackControls(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    // 118dp gives the seekbar, title, controls, and time labels stable automotive touch spacing.
                     .height(118.dp)
                     .background(
+                        // Dark bottom gradient preserves video readability under the controls.
                         Brush.verticalGradient(
                             colors = listOf(
                                 Color(0x0017142F),
@@ -142,6 +146,7 @@ internal fun HostPlaybackControls(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
+                        // 88dp side padding leaves room for edge gestures and keeps controls centered on wide displays.
                         .padding(start = 88.dp, end = 88.dp, bottom = 16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -185,10 +190,9 @@ internal fun HostPlaybackControls(
                             onClick = controlsState::cyclePlaybackSpeed,
                             modifier = Modifier.size(48.dp)
                         ) {
-                            Icon(
+                            Image(
                                 painter = painterResource(speedOption.iconResId),
                                 contentDescription = "Playback speed ${speedOption.label}",
-                                tint = Color.Unspecified,
                                 modifier = Modifier.size(38.dp)
                             )
                         }
@@ -203,15 +207,12 @@ internal fun HostPlaybackControls(
                         Spacer(modifier = Modifier.width(10.dp))
                         IconButton(
                             onClick = controlsState::togglePlayback,
-                            modifier = Modifier
-                                .size(58.dp)
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.12f))
+                            // Play/pause is the primary control, so it gets the largest hit target in the bar.
+                            modifier = Modifier.size(58.dp)
                         ) {
-                            Icon(
+                            Image(
                                 painter = mediaControlPainter(controlsState.isPlaying),
                                 contentDescription = if (controlsState.isPlaying) "Pause" else "Play",
-                                tint = Color.Unspecified,
                                 modifier = Modifier.size(38.dp)
                             )
                         }
@@ -225,7 +226,13 @@ internal fun HostPlaybackControls(
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Box(
-                            modifier = Modifier.size(36.dp),
+                            modifier = Modifier
+                                // PiP action is intentionally smaller than transport controls to reduce accidental taps.
+                                .size(36.dp)
+                                .clickable {
+                                    controlsState.showControls()
+                                    onPictureInPictureClick()
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             PictureInPictureGlyph()
@@ -277,12 +284,12 @@ private fun MediaControlButton(
 ) {
     IconButton(
         onClick = onClick,
+        // Separate button and icon sizes preserve original drawable pixels without Compose tint overlays.
         modifier = Modifier.size(size)
     ) {
-        Icon(
+        Image(
             painter = painter,
             contentDescription = contentDescription,
-            tint = Color.Unspecified,
             modifier = Modifier.size(iconSize)
         )
     }

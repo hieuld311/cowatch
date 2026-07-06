@@ -16,7 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.Player
-import com.hieuld.cowatch.display.DisplayInfo
+import com.hieuld.cowatch.domain.display.DisplayInfo
 import com.hieuld.cowatch.render.VideoRenderEngine
 
 @Composable
@@ -29,7 +29,8 @@ internal fun FrontPlayerScreen(
     onBroadcastCheckedChange: (Boolean) -> Unit,
     onShareDialogDismiss: () -> Unit,
     onStartSharing: (Set<Int>) -> Unit,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onPictureInPictureClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -41,7 +42,8 @@ internal fun FrontPlayerScreen(
                 renderEngine = renderEngine,
                 broadcastChecked = broadcastChecked,
                 onBroadcastCheckedChange = onBroadcastCheckedChange,
-                onBackClick = onBackClick
+                onBackClick = onBackClick,
+                onPictureInPictureClick = onPictureInPictureClick
             )
 
             if (showShareDialog) {
@@ -61,13 +63,15 @@ private fun FullPlayerShell(
     renderEngine: VideoRenderEngine,
     broadcastChecked: Boolean,
     onBroadcastCheckedChange: (Boolean) -> Unit,
-    onBackClick: () -> Unit
+    onBackClick: () -> Unit,
+    onPictureInPictureClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black)
     ) {
+        // SurfaceView fills the player; aspect ratio is handled by FrameFanoutRenderEngine.fitViewport().
         HostVideoSurface(
             modifier = Modifier.fillMaxSize(),
             renderEngine = renderEngine
@@ -77,7 +81,8 @@ private fun FullPlayerShell(
             modifier = Modifier.matchParentSize(),
             player = player,
             broadcastChecked = broadcastChecked,
-            onBroadcastCheckedChange = onBroadcastCheckedChange
+            onBroadcastCheckedChange = onBroadcastCheckedChange,
+            onPictureInPictureClick = onPictureInPictureClick
         )
 
         IconButton(
@@ -85,6 +90,7 @@ private fun FullPlayerShell(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(top = 12.dp, end = 12.dp)
+                // 64dp hit target mirrors the shared-display close button.
                 .size(64.dp)
         ) {
             CloseGlyph(modifier = Modifier.size(36.dp))

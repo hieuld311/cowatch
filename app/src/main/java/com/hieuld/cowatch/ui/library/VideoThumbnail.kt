@@ -13,30 +13,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import com.hieuld.cowatch.media.RawVideo
-import com.hieuld.cowatch.media.RawVideoThumbnailCache
-import com.hieuld.cowatch.media.RawVideoThumbnailProfile
+import com.hieuld.cowatch.domain.media.AssetVideo
+import com.hieuld.cowatch.data.media.provider.AssetVideoThumbnailCache
+import com.hieuld.cowatch.data.media.provider.AssetVideoThumbnailProfile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
 internal fun VideoThumbnail(
-    video: RawVideo,
+    video: AssetVideo,
     contentDescription: String?,
     modifier: Modifier = Modifier,
     contentScale: ContentScale = ContentScale.Crop,
-    thumbnailProfile: RawVideoThumbnailProfile = RawVideoThumbnailProfile.Rail
+    thumbnailProfile: AssetVideoThumbnailProfile = AssetVideoThumbnailProfile.Rail
 ) {
     val context = LocalContext.current.applicationContext
+    // assetPath is stable across builds and is used for both Compose state and bitmap cache keys.
     val thumbnail by produceState<Bitmap?>(
-        initialValue = RawVideoThumbnailCache.getCached(video.resId, thumbnailProfile),
-        key1 = video.resId,
+        initialValue = AssetVideoThumbnailCache.getCached(video.assetPath, thumbnailProfile),
+        key1 = video.assetPath,
         key2 = thumbnailProfile,
         key3 = context
     ) {
         if (value == null) {
             value = withContext(Dispatchers.IO) {
-                RawVideoThumbnailCache.getOrLoad(context, video, thumbnailProfile)
+                AssetVideoThumbnailCache.getOrLoad(context, video, thumbnailProfile)
             }
         }
     }

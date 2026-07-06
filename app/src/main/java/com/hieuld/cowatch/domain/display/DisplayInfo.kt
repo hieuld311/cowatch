@@ -1,4 +1,4 @@
-package com.hieuld.cowatch.display
+package com.hieuld.cowatch.domain.display
 
 data class DisplayInfo(
     val displayId: Int,

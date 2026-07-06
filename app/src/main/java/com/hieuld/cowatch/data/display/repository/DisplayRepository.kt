@@ -1,7 +1,8 @@
-package com.hieuld.cowatch.display
+package com.hieuld.cowatch.data.display.repository
 
 import android.content.Context
 import android.hardware.display.DisplayManager
+import com.hieuld.cowatch.domain.display.DisplayInfo
 
 class DisplayRepository(
     context: Context

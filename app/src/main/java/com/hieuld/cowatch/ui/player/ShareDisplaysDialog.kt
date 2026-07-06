@@ -31,7 +31,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.hieuld.cowatch.display.DisplayInfo
+import com.hieuld.cowatch.domain.display.DisplayInfo
 
 @Composable
 internal fun ShareDisplaysDialog(
@@ -128,6 +128,7 @@ internal fun ShareDisplaysDialog(
                 )
             }
         },
+        // 8dp radius keeps the dialog aligned with the compact operational UI style.
         shape = RoundedCornerShape(8.dp)
     )
 }
@@ -143,6 +144,7 @@ private fun SelectableDisplayRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // 56dp row height gives each display target a stable automotive touch footprint.
             .height(56.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

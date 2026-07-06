@@ -12,7 +12,9 @@ import kotlin.math.roundToInt
 internal const val CARD_SCALE_MIN = 0.96f
 internal const val CARD_SCALE_RANGE = 0.04f
 
+// Focused card is 1.5x side-card width; derived thumbnail heights stay 16:9.
 private const val FOCUSED_CARD_SCALE = 1.5f
+// Drag must pass about one third of a slot before focus commits.
 private const val FOCUS_SETTLE_THRESHOLD = 0.32f
 
 @Composable
@@ -22,6 +24,7 @@ internal fun rememberRailMetrics(
 ): RailMetrics {
     val density = LocalDensity.current
     return remember(videoCount, containerWidthPx, density) {
+        // dp values define visual spacing; px values drive drag math and PiP sizing.
         val horizontalPadding = 16.dp
         val topPadding = 12.dp
         val cardGap = 16.dp
@@ -37,6 +40,7 @@ internal fun rememberRailMetrics(
             availableWidthPx
         }
         val focusedWidthPx = sideWidthPx * FOCUSED_CARD_SCALE
+        // All exhibition thumbnails are displayed at 16:9 regardless of source dimensions.
         val sideHeightPx = sideWidthPx * 9f / 16f
         val focusedHeightPx = focusedWidthPx * 9f / 16f
 

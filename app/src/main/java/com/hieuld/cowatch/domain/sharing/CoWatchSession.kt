@@ -1,4 +1,4 @@
-package com.hieuld.cowatch.cowatch
+package com.hieuld.cowatch.domain.sharing
 
 data class CoWatchSession(
     val sessionId: String,

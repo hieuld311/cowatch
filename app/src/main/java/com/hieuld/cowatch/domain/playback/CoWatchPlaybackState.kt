@@ -1,4 +1,4 @@
-package com.hieuld.cowatch.playback
+package com.hieuld.cowatch.domain.playback
 
 sealed interface CoWatchPlaybackState {
     data object Idle : CoWatchPlaybackState

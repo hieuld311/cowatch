@@ -1,4 +1,4 @@
-package com.hieuld.cowatch.media
+package com.hieuld.cowatch.domain.media
 
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -8,14 +8,14 @@ sealed interface VideoSource {
 
     fun toMediaItem(packageName: String): MediaItem
 
-    data class Raw(
-        val resId: Int,
-        val resourceName: String,
+    data class Asset(
+        val assetPath: String,
         override val title: String
     ) : VideoSource {
         override fun toMediaItem(packageName: String): MediaItem {
+            // Media3 can resolve asset:/// URIs through the app APK assets without copying media to storage.
             return MediaItem.Builder()
-                .setUri("android.resource://$packageName/$resId")
+                .setUri("asset:///$assetPath")
                 .setMediaMetadata(
                     MediaMetadata.Builder()
                         .setTitle(title)

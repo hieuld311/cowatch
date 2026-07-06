@@ -37,6 +37,7 @@ internal fun VideoSeekBar(
 
     Canvas(
         modifier = modifier
+            // 48dp hit area keeps the 6dp visual track easy to touch in a vehicle display.
             .height(48.dp)
             .onSizeChanged { size -> widthPx = size.width.coerceAtLeast(1) }
             .pointerInput(enabled, durationMs) {
@@ -70,6 +71,7 @@ internal fun VideoSeekBar(
             0f
         }
         val progressX = size.width * progress
+        // Visual track/thumb sizes are density-aware dp, converted to px inside Canvas.
         val strokeWidth = 6.dp.toPx()
         val thumbRadius = 12.dp.toPx()
 

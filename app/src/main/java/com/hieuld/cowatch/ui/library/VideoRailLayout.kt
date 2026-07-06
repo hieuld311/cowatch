@@ -55,6 +55,28 @@ internal fun rememberRailMetrics(
     }
 }
 
+@Composable
+internal fun rememberVisibleRailCards(
+    videoCount: Int,
+    focusedIndex: Int,
+    dragSlots: Float,
+    metrics: RailMetrics
+): List<RailCardLayout> {
+    return remember(videoCount, focusedIndex, dragSlots, metrics) {
+        List(videoCount) { index ->
+            railCardLayout(
+                index = index,
+                focusedIndex = focusedIndex,
+                itemCount = videoCount,
+                dragSlots = dragSlots,
+                metrics = metrics
+            )
+        }
+            .filterNotNull()
+            .sortedBy { it.focusProgress }
+    }
+}
+
 internal data class RailMetrics(
     val railHeight: Dp,
     val topPaddingPx: Float,

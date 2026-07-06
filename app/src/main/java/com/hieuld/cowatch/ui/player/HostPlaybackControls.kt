@@ -3,11 +3,8 @@ package com.hieuld.cowatch.ui.player
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,33 +24,23 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.media3.common.C
 import androidx.media3.common.Player
-import androidx.media3.common.PlaybackParameters
+import com.hieuld.cowatch.R
 import kotlinx.coroutines.delay
 
 private const val CONTROLS_AUTO_HIDE_DELAY_MS = 3_000L
-private val PLAYBACK_SPEEDS = listOf(1f, 1.5f, 2f)
 
 @Composable
 internal fun HostPlaybackControls(
@@ -62,67 +49,51 @@ internal fun HostPlaybackControls(
     onBroadcastCheckedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var isPlaying by remember { mutableStateOf(player.isPlaying) }
-    var durationMs by remember {
-        mutableStateOf(player.duration.takeIf { it > 0L } ?: 0L)
-    }
-    var sliderPositionMs by remember { mutableStateOf(player.currentPosition.coerceAtLeast(0L)) }
-    var videoTitle by remember { mutableStateOf(resolvePlayerTitle(player)) }
-    var playbackSpeed by remember { mutableStateOf(player.playbackParameters.speed) }
-    var isDragging by remember { mutableStateOf(false) }
-    var controlsVisible by remember { mutableStateOf(true) }
-    var interactionVersion by remember { mutableStateOf(0) }
-
-    fun normalizedDuration(): Long {
-        return player.duration.takeIf { it > 0L && it != C.TIME_UNSET } ?: 0L
-    }
-
-    fun refreshPlaybackSnapshot(updateSlider: Boolean) {
-        isPlaying = player.isPlaying
-        durationMs = normalizedDuration()
-        val currentPositionMs = player.currentPosition.coerceAtLeast(0L)
-        videoTitle = resolvePlayerTitle(player)
-        playbackSpeed = player.playbackParameters.speed
-
-        if (updateSlider && !isDragging) {
-            sliderPositionMs = currentPositionMs
-        }
-    }
-
-    fun showControls() {
-        refreshPlaybackSnapshot(updateSlider = !isDragging)
-        controlsVisible = true
-        interactionVersion += 1
-    }
+    val controlsState = rememberPlaybackControlsState(player)
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) {
-                refreshPlaybackSnapshot(updateSlider = !isDragging)
+                controlsState.refresh(updateSlider = !controlsState.isDragging)
             }
         }
 
         player.addListener(listener)
-        refreshPlaybackSnapshot(updateSlider = true)
+        controlsState.refresh(updateSlider = true)
 
         onDispose {
             player.removeListener(listener)
         }
     }
 
-    LaunchedEffect(player, controlsVisible, isPlaying, isDragging) {
-        if (!controlsVisible || !isPlaying || isDragging) return@LaunchedEffect
+    LaunchedEffect(
+        player,
+        controlsState.controlsVisible,
+        controlsState.isPlaying,
+        controlsState.isDragging
+    ) {
+        if (
+            !controlsState.controlsVisible ||
+            !controlsState.isPlaying ||
+            controlsState.isDragging
+        ) {
+            return@LaunchedEffect
+        }
 
         while (true) {
-            sliderPositionMs = player.currentPosition.coerceAtLeast(0L)
+            controlsState.updatePlaybackPosition()
             delay(250L)
         }
     }
 
-    LaunchedEffect(interactionVersion, controlsVisible, isDragging) {
-        if (controlsVisible && !isDragging) {
+    LaunchedEffect(
+        controlsState.interactionVersion,
+        controlsState.controlsVisible,
+        controlsState.isDragging
+    ) {
+        if (controlsState.controlsVisible && !controlsState.isDragging) {
             delay(CONTROLS_AUTO_HIDE_DELAY_MS)
-            controlsVisible = false
+            controlsState.hideControlsIfIdle()
         }
     }
 
@@ -131,11 +102,11 @@ internal fun HostPlaybackControls(
             indication = null,
             interactionSource = remember { MutableInteractionSource() }
         ) {
-            showControls()
+            controlsState.showControls()
         }
     ) {
         AnimatedVisibility(
-            visible = controlsVisible,
+            visible = controlsState.controlsVisible,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier
@@ -157,19 +128,11 @@ internal fun HostPlaybackControls(
                     )
             ) {
                 VideoSeekBar(
-                    positionMs = sliderPositionMs,
-                    durationMs = durationMs,
-                    onSeekPreview = { position ->
-                        showControls()
-                        isDragging = true
-                        sliderPositionMs = position
-                    },
-                    onSeekFinished = {
-                        player.seekTo(sliderPositionMs)
-                        isDragging = false
-                        showControls()
-                    },
-                    enabled = durationMs > 0L,
+                    positionMs = controlsState.sliderPositionMs,
+                    durationMs = controlsState.durationMs,
+                    onSeekPreview = controlsState::previewSeek,
+                    onSeekFinished = controlsState::finishSeek,
+                    enabled = controlsState.durationMs > 0L,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .fillMaxWidth()
@@ -187,12 +150,12 @@ internal fun HostPlaybackControls(
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         PlayerBarText(
-                            text = formatPlaybackTime(sliderPositionMs),
+                            text = formatPlaybackTime(controlsState.sliderPositionMs),
                             alpha = 0.62f,
                             style = MaterialTheme.typography.labelMedium
                         )
                         PlayerBarText(
-                            text = videoTitle,
+                            text = controlsState.videoTitle,
                             alpha = 0.86f,
                             style = MaterialTheme.typography.bodySmall,
                             overflow = TextOverflow.Ellipsis
@@ -204,12 +167,13 @@ internal fun HostPlaybackControls(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
+                        val speedOption = controlsState.speedOption
                         Box(
                             modifier = Modifier
                                 .size(48.dp)
                                 .clip(CircleShape)
                                 .clickable {
-                                    showControls()
+                                    controlsState.showControls()
                                     onBroadcastCheckedChange(!broadcastChecked)
                                 },
                             contentAlignment = Alignment.Center
@@ -217,67 +181,47 @@ internal fun HostPlaybackControls(
                             BroadcastGlyph(active = broadcastChecked)
                         }
                         Spacer(modifier = Modifier.width(6.dp))
-                        PlayerBarText(
-                            text = formatSpeed(playbackSpeed),
-                            alpha = 0.88f,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.clickable {
-                                showControls()
-                                val nextSpeed = nextPlaybackSpeed(playbackSpeed)
-                                player.playbackParameters = PlaybackParameters(nextSpeed)
-                                playbackSpeed = nextSpeed
-                            }
-                        )
+                        IconButton(
+                            onClick = controlsState::cyclePlaybackSpeed,
+                            modifier = Modifier.size(48.dp)
+                        ) {
+                            Icon(
+                                painter = painterResource(speedOption.iconResId),
+                                contentDescription = "Playback speed ${speedOption.label}",
+                                tint = Color.Unspecified,
+                                modifier = Modifier.size(38.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.width(12.dp))
                         MediaControlButton(
-                            painter = painterResource(android.R.drawable.ic_media_rew),
+                            painter = painterResource(R.drawable.ico_media_prev_p),
                             contentDescription = "Back",
                             size = 34.dp,
-                            iconSize = 22.dp,
-                            onClick = {
-                                showControls()
-                                val target = (player.currentPosition - 5_000L).coerceAtLeast(0L)
-                                player.seekTo(target)
-                                sliderPositionMs = target
-                            }
+                            iconSize = 28.dp,
+                            onClick = controlsState::seekBack
                         )
                         Spacer(modifier = Modifier.width(10.dp))
                         IconButton(
-                            onClick = {
-                                showControls()
-                                if (player.isPlaying) {
-                                    player.pause()
-                                } else {
-                                    player.play()
-                                }
-                            },
+                            onClick = controlsState::togglePlayback,
                             modifier = Modifier
                                 .size(58.dp)
                                 .clip(CircleShape)
                                 .background(Color.White.copy(alpha = 0.12f))
                         ) {
                             Icon(
-                                painter = mediaControlPainter(isPlaying),
-                                contentDescription = if (isPlaying) "Pause" else "Play",
-                                tint = Color.White,
+                                painter = mediaControlPainter(controlsState.isPlaying),
+                                contentDescription = if (controlsState.isPlaying) "Pause" else "Play",
+                                tint = Color.Unspecified,
                                 modifier = Modifier.size(38.dp)
                             )
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         MediaControlButton(
-                            painter = painterResource(android.R.drawable.ic_media_ff),
+                            painter = painterResource(R.drawable.ico_media_next_p),
                             contentDescription = "Forward",
                             size = 34.dp,
-                            iconSize = 22.dp,
-                            onClick = {
-                                showControls()
-                                val target = player.currentPosition + 5_000L
-                                val targetPosition =
-                                    if (durationMs > 0L) target.coerceAtMost(durationMs) else target
-                                player.seekTo(targetPosition)
-                                sliderPositionMs = targetPosition
-                            }
+                            iconSize = 28.dp,
+                            onClick = controlsState::seekForward
                         )
                         Spacer(modifier = Modifier.width(12.dp))
                         Box(
@@ -293,7 +237,7 @@ internal fun HostPlaybackControls(
                         contentAlignment = Alignment.CenterEnd
                     ) {
                         PlayerBarText(
-                            text = formatPlaybackTime(durationMs),
+                            text = formatPlaybackTime(controlsState.durationMs),
                             alpha = 0.62f,
                             style = MaterialTheme.typography.labelMedium
                         )
@@ -310,7 +254,6 @@ private fun PlayerBarText(
     alpha: Float,
     style: androidx.compose.ui.text.TextStyle,
     modifier: Modifier = Modifier,
-    fontWeight: FontWeight? = null,
     overflow: TextOverflow = TextOverflow.Clip
 ) {
     Text(
@@ -319,7 +262,6 @@ private fun PlayerBarText(
         color = Color.White.copy(alpha = alpha),
         style = style,
         fontFamily = FontFamily.Monospace,
-        fontWeight = fontWeight,
         maxLines = 1,
         overflow = overflow
     )
@@ -340,86 +282,8 @@ private fun MediaControlButton(
         Icon(
             painter = painter,
             contentDescription = contentDescription,
-            tint = Color.White.copy(alpha = 0.82f),
+            tint = Color.Unspecified,
             modifier = Modifier.size(iconSize)
-        )
-    }
-}
-
-@Composable
-private fun VideoSeekBar(
-    positionMs: Long,
-    durationMs: Long,
-    enabled: Boolean,
-    onSeekPreview: (Long) -> Unit,
-    onSeekFinished: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var widthPx by remember { mutableStateOf(1) }
-
-    fun positionFromX(x: Float): Long {
-        if (durationMs <= 0L || widthPx <= 0) return 0L
-
-        val fraction = (x / widthPx).coerceIn(0f, 1f)
-        return (durationMs * fraction).toLong()
-    }
-
-    Canvas(
-        modifier = modifier
-            .height(48.dp)
-            .onSizeChanged { size -> widthPx = size.width.coerceAtLeast(1) }
-            .pointerInput(enabled, durationMs) {
-                if (!enabled) return@pointerInput
-
-                detectTapGestures { offset ->
-                    onSeekPreview(positionFromX(offset.x))
-                    onSeekFinished()
-                }
-            }
-            .pointerInput(enabled, durationMs) {
-                if (!enabled) return@pointerInput
-
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        onSeekPreview(positionFromX(offset.x))
-                    },
-                    onDrag = { change, _ ->
-                        change.consume()
-                        onSeekPreview(positionFromX(change.position.x))
-                    },
-                    onDragEnd = onSeekFinished,
-                    onDragCancel = onSeekFinished
-                )
-            }
-    ) {
-        val trackY = size.height / 2f
-        val progress = if (durationMs > 0L) {
-            (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f)
-        } else {
-            0f
-        }
-        val progressX = size.width * progress
-        val strokeWidth = 6.dp.toPx()
-        val thumbRadius = 12.dp.toPx()
-
-        drawLine(
-            color = Color(0xFF777777),
-            start = Offset(0f, trackY),
-            end = Offset(size.width, trackY),
-            strokeWidth = strokeWidth,
-            cap = StrokeCap.Round
-        )
-        drawLine(
-            color = Color(0xFF111111),
-            start = Offset(0f, trackY),
-            end = Offset(progressX, trackY),
-            strokeWidth = strokeWidth,
-            cap = StrokeCap.Round
-        )
-        drawCircle(
-            color = Color.White,
-            radius = thumbRadius,
-            center = Offset(progressX, trackY)
         )
     }
 }
@@ -428,29 +292,9 @@ private fun VideoSeekBar(
 private fun mediaControlPainter(isPlaying: Boolean): Painter {
     return painterResource(
         id = if (isPlaying) {
-            android.R.drawable.ic_media_pause
+            R.drawable.ico_media_pause_p
         } else {
-            android.R.drawable.ic_media_play
+            R.drawable.ico_media_play_l_p
         }
     )
-}
-
-private fun nextPlaybackSpeed(currentSpeed: Float): Float {
-    val currentIndex = PLAYBACK_SPEEDS.indexOfFirst { speed ->
-        kotlin.math.abs(speed - currentSpeed) < 0.05f
-    }
-    return PLAYBACK_SPEEDS[(currentIndex + 1).floorMod(PLAYBACK_SPEEDS.size)]
-}
-
-private fun formatSpeed(speed: Float): String {
-    val normalized = PLAYBACK_SPEEDS.minBy { kotlin.math.abs(it - speed) }
-    return when (normalized) {
-        1f -> "1X"
-        1.5f -> "1.5X"
-        else -> "2X"
-    }
-}
-
-private fun Int.floorMod(other: Int): Int {
-    return ((this % other) + other) % other
 }

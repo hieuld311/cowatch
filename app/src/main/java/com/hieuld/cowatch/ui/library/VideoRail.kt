@@ -90,49 +90,67 @@ internal fun VideoRail(
     ) {
         if (videos.isEmpty()) return@Box
 
-        val cards = videos.indices.mapNotNull { index ->
-            railCardLayout(
-                index = index,
-                focusedIndex = focusedIndex,
-                itemCount = videos.size,
-                dragSlots = dragSlots,
-                metrics = metrics
-            )
-        }.sortedBy { it.focusProgress }
+        val cards = rememberVisibleRailCards(
+            videoCount = videos.size,
+            focusedIndex = focusedIndex,
+            dragSlots = dragSlots,
+            metrics = metrics
+        )
 
         cards.forEach { card ->
             val video = videos[card.index]
             key(video.resId) {
-                val widthPx = metrics.sideWidthPx +
-                    (metrics.focusedWidthPx - metrics.sideWidthPx) * card.focusProgress
-                val heightPx = metrics.sideHeightPx +
-                    (metrics.focusedHeightPx - metrics.sideHeightPx) * card.focusProgress
-                val selected = card.index == focusedIndex
-                val cardScale = CARD_SCALE_MIN + card.focusProgress * CARD_SCALE_RANGE
-
-                VideoRailCard(
+                VisibleRailCard(
                     video = video,
-                    selected = selected,
-                    width = with(density) { widthPx.toDp() },
-                    thumbnailHeight = with(density) { heightPx.toDp() },
-                    modifier = Modifier
-                        .offset {
-                            IntOffset(
-                                card.xPx.roundToInt(),
-                                metrics.topPaddingPx.roundToInt()
-                            )
-                        }
-                        .scale(cardScale)
-                        .graphicsLayer { shadowElevation = if (selected) 14f else 0f },
-                    onClick = {
-                        if (selected) {
-                            onVideoSelected(video)
-                        } else {
-                            onFocusChanged(card.index)
-                        }
-                    }
+                    card = card,
+                    metrics = metrics,
+                    focusedIndex = focusedIndex,
+                    density = density,
+                    onFocusChanged = onFocusChanged,
+                    onVideoSelected = onVideoSelected
                 )
             }
         }
     }
+}
+
+@Composable
+private fun VisibleRailCard(
+    video: RawVideo,
+    card: RailCardLayout,
+    metrics: RailMetrics,
+    focusedIndex: Int,
+    density: androidx.compose.ui.unit.Density,
+    onFocusChanged: (Int) -> Unit,
+    onVideoSelected: (RawVideo) -> Unit
+) {
+    val selected = card.index == focusedIndex
+    val widthPx = metrics.sideWidthPx +
+        (metrics.focusedWidthPx - metrics.sideWidthPx) * card.focusProgress
+    val heightPx = metrics.sideHeightPx +
+        (metrics.focusedHeightPx - metrics.sideHeightPx) * card.focusProgress
+    val cardScale = CARD_SCALE_MIN + card.focusProgress * CARD_SCALE_RANGE
+
+    VideoRailCard(
+        video = video,
+        selected = selected,
+        width = with(density) { widthPx.toDp() },
+        thumbnailHeight = with(density) { heightPx.toDp() },
+        modifier = Modifier
+            .offset {
+                IntOffset(
+                    card.xPx.roundToInt(),
+                    metrics.topPaddingPx.roundToInt()
+                )
+            }
+            .scale(cardScale)
+            .graphicsLayer { shadowElevation = if (selected) 14f else 0f },
+        onClick = {
+            if (selected) {
+                onVideoSelected(video)
+            } else {
+                onFocusChanged(card.index)
+            }
+        }
+    )
 }

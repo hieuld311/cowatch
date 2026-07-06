@@ -1,6 +1,5 @@
 package com.hieuld.cowatch.ui.library
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -14,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,11 +22,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.hieuld.cowatch.R
 import com.hieuld.cowatch.media.RawVideo
 
 @Composable
@@ -77,11 +79,13 @@ internal fun VideoRailCard(
                         .clip(CircleShape)
                         .background(Color.White)
                 ) {
-                    PlayTriangle(
-                        color = Color(0xFF6E8295),
+                    Icon(
+                        painter = painterResource(R.drawable.ico_media_play_l_p),
+                        contentDescription = "Play",
+                        tint = Color.Unspecified,
                         modifier = Modifier
                             .align(Alignment.Center)
-                            .size(12.dp)
+                            .size(18.dp)
                     )
                 }
             }
@@ -99,21 +103,5 @@ internal fun VideoRailCard(
                 overflow = TextOverflow.Ellipsis
             )
         }
-    }
-}
-
-@Composable
-private fun PlayTriangle(
-    color: Color,
-    modifier: Modifier = Modifier
-) {
-    Canvas(modifier = modifier) {
-        val path = androidx.compose.ui.graphics.Path().apply {
-            moveTo(size.width * 0.25f, size.height * 0.12f)
-            lineTo(size.width * 0.25f, size.height * 0.88f)
-            lineTo(size.width * 0.86f, size.height * 0.50f)
-            close()
-        }
-        drawPath(path = path, color = color)
     }
 }

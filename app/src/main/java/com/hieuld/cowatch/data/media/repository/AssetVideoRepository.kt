@@ -5,8 +5,9 @@ import com.hieuld.cowatch.domain.media.AssetVideo
 import com.hieuld.cowatch.util.MediaFileTypes
 
 object AssetVideoRepository {
+    private const val VIDEO_ASSET_ROOT = "fileVideoSample"
 
-    // Exhibition media is bundled in APK assets; assetPath is the stable id used by UI, PiP, and player routing.
+    // Exhibition videos live under assets/fileVideoSample; assetPath keeps the folder for Media3 asset:/// playback.
     fun listVideos(context: Context): List<AssetVideo> {
         return scanAssetMediaItems(context)
             .filter { item -> item.type == AssetMediaType.Video }
@@ -21,15 +22,15 @@ object AssetVideoRepository {
 
     private fun scanAssetMediaItems(context: Context): List<ScannedAssetMediaItem> {
         return context.assets
-            .listAssetPaths()
+            .listAssetPaths(VIDEO_ASSET_ROOT)
             .mapNotNull { assetPath -> assetPath.toScannedMediaItem() }
     }
 
-    // Recursively scan assets so production media can be grouped in folders without changing app code.
-    private fun android.content.res.AssetManager.listAssetPaths(): List<String> {
+    // Recursively scan only the video catalog folder so unrelated assets never appear in the library.
+    private fun android.content.res.AssetManager.listAssetPaths(rootDirectory: String): List<String> {
         val result = mutableListOf<String>()
         collectAssetPaths(
-            directory = "",
+            directory = rootDirectory,
             result = result
         )
         return result

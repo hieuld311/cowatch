@@ -1,6 +1,7 @@
 package com.hieuld.cowatch.ui.player
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -12,12 +13,14 @@ import androidx.media3.common.Player
 import androidx.media3.common.PlaybackParameters
 import com.hieuld.cowatch.ext.normalizedDurationMs
 import com.hieuld.cowatch.ext.safeCurrentPositionMs
+import com.hieuld.cowatch.util.resolvePlayerTitle
 
 @Composable
 internal fun rememberPlaybackControlsState(player: Player): PlaybackControlsState {
     return remember(player) { PlaybackControlsState(player) }
 }
 
+@Stable
 internal class PlaybackControlsState(
     private val player: Player
 ) {

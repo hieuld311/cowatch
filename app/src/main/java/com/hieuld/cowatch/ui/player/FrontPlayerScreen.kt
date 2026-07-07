@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -36,72 +35,6 @@ internal fun FrontPlayerScreen(
     onBroadcastCheckedChange: (Boolean) -> Unit,
     onShareDialogDismiss: () -> Unit,
     onStartSharing: (Set<Int>) -> Unit,
-    onBackClick: () -> Unit,
-    onPictureInPictureClick: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = Color.Black
-    ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            FullPlayerShell(
-                player = player,
-                renderEngine = renderEngine,
-                broadcastChecked = broadcastChecked,
-                onBroadcastCheckedChange = onBroadcastCheckedChange,
-                onBackClick = onBackClick,
-                onPictureInPictureClick = onPictureInPictureClick
-            )
-
-            if (showShareDialog) {
-                ShareDisplaysDialog(
-                    displays = displays,
-                    onDismiss = onShareDialogDismiss,
-                    onStartSharing = onStartSharing
-                )
-            }
-
-            HostBroadcastNotification(
-                text = hostNotificationText,
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 10.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun HostBroadcastNotification(
-    text: String?,
-    modifier: Modifier = Modifier
-) {
-    AnimatedVisibility(
-        visible = text != null,
-        enter = fadeIn(),
-        exit = fadeOut(),
-        modifier = modifier
-    ) {
-        Text(
-            text = text.orEmpty(),
-            color = Color(0xFFDCE8F2),
-            fontFamily = FontFamily.Monospace,
-            modifier = Modifier
-                .background(
-                    color = Color(0xFF25364A),
-                    shape = RoundedCornerShape(4.dp)
-                )
-                .padding(horizontal = 28.dp, vertical = 8.dp)
-        )
-    }
-}
-
-@Composable
-private fun FullPlayerShell(
-    player: Player,
-    renderEngine: VideoRenderEngine,
-    broadcastChecked: Boolean,
-    onBroadcastCheckedChange: (Boolean) -> Unit,
     onBackClick: () -> Unit,
     onPictureInPictureClick: () -> Unit
 ) {
@@ -134,6 +67,21 @@ private fun FullPlayerShell(
         ) {
             CloseGlyph(modifier = Modifier.size(36.dp))
         }
+
+        if (showShareDialog) {
+            ShareDisplaysDialog(
+                displays = displays,
+                onDismiss = onShareDialogDismiss,
+                onStartSharing = onStartSharing
+            )
+        }
+
+        HostBroadcastNotification(
+            text = hostNotificationText,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 10.dp)
+        )
     }
 }
 
@@ -170,4 +118,29 @@ private fun HostVideoSurface(
             }
         }
     )
+}
+
+@Composable
+private fun HostBroadcastNotification(
+    text: String?,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = text != null,
+        enter = fadeIn(),
+        exit = fadeOut(),
+        modifier = modifier
+    ) {
+        Text(
+            text = text.orEmpty(),
+            color = Color(0xFFDCE8F2),
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier
+                .background(
+                    color = Color(0xFF25364A),
+                    shape = RoundedCornerShape(4.dp)
+                )
+                .padding(horizontal = 28.dp, vertical = 8.dp)
+        )
+    }
 }

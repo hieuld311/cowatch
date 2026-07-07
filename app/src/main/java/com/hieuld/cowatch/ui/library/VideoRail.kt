@@ -15,7 +15,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -105,7 +104,6 @@ internal fun VideoRail(
                     video = video,
                     card = card,
                     metrics = metrics,
-                    focusedIndex = focusedIndex,
                     density = density,
                     onFocusChanged = onFocusChanged,
                     onVideoSelected = onVideoSelected
@@ -120,12 +118,11 @@ private fun VisibleRailCard(
     video: AssetVideo,
     card: RailCardLayout,
     metrics: RailMetrics,
-    focusedIndex: Int,
     density: androidx.compose.ui.unit.Density,
     onFocusChanged: (Int) -> Unit,
     onVideoSelected: (AssetVideo) -> Unit
 ) {
-    val selected = card.index == focusedIndex
+    val selected = card.selectedSlot
     val widthPx = metrics.sideWidthPx +
         (metrics.focusedWidthPx - metrics.sideWidthPx) * card.focusProgress
     val heightPx = metrics.sideHeightPx +
@@ -144,8 +141,7 @@ private fun VisibleRailCard(
                     metrics.topPaddingPx.roundToInt()
                 )
             }
-            .scale(cardScale)
-            .graphicsLayer { shadowElevation = if (selected) 14f else 0f },
+            .scale(cardScale),
         onClick = {
             if (selected) {
                 onVideoSelected(video)

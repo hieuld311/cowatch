@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,13 +34,16 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import com.hieuld.cowatch.R
+import com.hieuld.cowatch.util.formatPlaybackTime
 import kotlinx.coroutines.delay
 
 private const val CONTROLS_AUTO_HIDE_DELAY_MS = 3_000L
+private const val PLAYBACK_POSITION_UPDATE_DELAY_MS = 500L
 
 @Composable
 internal fun HostPlaybackControls(
@@ -84,7 +86,7 @@ internal fun HostPlaybackControls(
 
         while (true) {
             controlsState.updatePlaybackPosition()
-            delay(250L)
+            delay(PLAYBACK_POSITION_UPDATE_DELAY_MS)
         }
     }
 
@@ -239,16 +241,13 @@ internal fun HostPlaybackControls(
                         }
                     }
 
-                    Box(
+                    PlayerBarText(
+                        text = formatPlaybackTime(controlsState.durationMs),
+                        alpha = 0.62f,
+                        style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.weight(1f),
-                        contentAlignment = Alignment.CenterEnd
-                    ) {
-                        PlayerBarText(
-                            text = formatPlaybackTime(controlsState.durationMs),
-                            alpha = 0.62f,
-                            style = MaterialTheme.typography.labelMedium
-                        )
-                    }
+                        textAlign = TextAlign.End
+                    )
                 }
             }
         }
@@ -261,7 +260,8 @@ private fun PlayerBarText(
     alpha: Float,
     style: androidx.compose.ui.text.TextStyle,
     modifier: Modifier = Modifier,
-    overflow: TextOverflow = TextOverflow.Clip
+    overflow: TextOverflow = TextOverflow.Clip,
+    textAlign: TextAlign? = null
 ) {
     Text(
         text = text,
@@ -270,7 +270,8 @@ private fun PlayerBarText(
         style = style,
         fontFamily = FontFamily.Monospace,
         maxLines = 1,
-        overflow = overflow
+        overflow = overflow,
+        textAlign = textAlign
     )
 }
 

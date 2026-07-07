@@ -19,3 +19,4 @@ Thumbs.db
 
 # Ignore bundled videos
 app/src/main/assets/*.mp4
+app/src/main/assets/**/*.mp4

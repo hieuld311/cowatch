@@ -25,8 +25,8 @@ class VideoLibraryActivity : ComponentActivity() {
                     videos = uiState.videos,
                     pipState = uiState.pipState,
                     onPipSelected = {
-                        viewModel.currentPipVideo()?.let { video ->
-                            startActivity(FrontPlayerContract.createIntent(this, video))
+                        uiState.pipState?.source?.let { source ->
+                            startActivity(FrontPlayerContract.createIntent(this, source))
                         }
                     },
                     onVideoSelected = { video ->

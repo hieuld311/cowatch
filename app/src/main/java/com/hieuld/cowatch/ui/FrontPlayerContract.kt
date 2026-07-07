@@ -13,8 +13,14 @@ object FrontPlayerContract {
 
     // Keep all player Intent extras centralized so Activity recreation and future source types stay stable.
     fun createIntent(context: Context, video: AssetVideo): Intent {
-        val source = video.toVideoSource()
+        return createIntent(context, video.toVideoSource())
+    }
+
+    fun createIntent(context: Context, source: VideoSource.Asset): Intent {
         return Intent(context, FrontPlayerActivity::class.java)
+            // Reuse a stopped fullscreen player instance when returning from app-scoped PiP.
+            .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
             .putExtra(EXTRA_SOURCE_TYPE, SOURCE_TYPE_ASSET)
             .putExtra(EXTRA_VIDEO_ASSET_PATH, source.assetPath)
             .putExtra(EXTRA_VIDEO_TITLE, source.title)

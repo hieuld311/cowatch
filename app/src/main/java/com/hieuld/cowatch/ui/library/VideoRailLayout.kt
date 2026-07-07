@@ -6,6 +6,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.roundToInt
 
@@ -67,17 +69,12 @@ internal fun rememberVisibleRailCards(
     metrics: RailMetrics
 ): List<RailCardLayout> {
     return remember(videoCount, focusedIndex, dragSlots, metrics) {
-        List(videoCount) { index ->
-            railCardLayout(
-                index = index,
-                focusedIndex = focusedIndex,
-                itemCount = videoCount,
-                dragSlots = dragSlots,
-                metrics = metrics
-            )
-        }
-            .filterNotNull()
-            .sortedBy { it.focusProgress }
+        visibleRailCards(
+            videoCount = videoCount,
+            focusedIndex = focusedIndex,
+            dragSlots = dragSlots,
+            metrics = metrics
+        )
     }
 }
 
@@ -97,7 +94,8 @@ internal data class RailMetrics(
 internal data class RailCardLayout(
     val index: Int,
     val xPx: Float,
-    val focusProgress: Float
+    val focusProgress: Float,
+    val selectedSlot: Boolean
 )
 
 internal fun calculateFocusedIndexForDragOffset(
@@ -117,40 +115,104 @@ internal fun calculateFocusedIndexForDragOffset(
     return circularIndex(focusedIndex + focusDelta, itemCount)
 }
 
-internal fun railCardLayout(
-    index: Int,
+private fun visibleRailCards(
+    videoCount: Int,
     focusedIndex: Int,
-    itemCount: Int,
     dragSlots: Float,
     metrics: RailMetrics
-): RailCardLayout? {
-    val baseSlot = circularIndex(index - focusedIndex, itemCount).toFloat() + dragSlots
-    val slot = visibleCircularSlot(
-        baseSlot = baseSlot,
-        itemCount = itemCount,
-        visibleSlots = metrics.visibleSlots
-    ) ?: return null
+): List<RailCardLayout> {
+    if (videoCount <= 0) return emptyList()
+    if (videoCount <= metrics.visibleSlots + 2) {
+        return exactVisibleRailCards(
+            videoCount = videoCount,
+            focusedIndex = focusedIndex,
+            dragSlots = dragSlots,
+            metrics = metrics
+        )
+    }
 
-    return RailCardLayout(
-        index = index,
-        xPx = metrics.xForSlot(slot),
-        focusProgress = focusProgressFromSlot(slot)
+    val firstRelativeSlot = floor(-dragSlots - 2f).toInt()
+    val lastRelativeSlot = ceil(metrics.visibleSlots - dragSlots + 2f).toInt()
+    val layoutsByIndex = LinkedHashMap<Int, RailCardLayout>()
+
+    for (relativeSlot in firstRelativeSlot..lastRelativeSlot) {
+        val slot = relativeSlot + dragSlots
+        if (!slot.isVisibleRailSlot(metrics.visibleSlots)) continue
+
+        val index = circularIndex(focusedIndex + relativeSlot, videoCount)
+        val layout = RailCardLayout(
+            index = index,
+            xPx = metrics.xForSlot(slot),
+            focusProgress = focusProgressFromSlot(slot),
+            selectedSlot = relativeSlot == 0
+        )
+        val current = layoutsByIndex[index]
+        if (current == null || layout.focusProgress > current.focusProgress) {
+            layoutsByIndex[index] = layout
+        }
+    }
+
+    return layoutsByIndex.values.sortedByRailDepth()
+}
+
+private fun exactVisibleRailCards(
+    videoCount: Int,
+    focusedIndex: Int,
+    dragSlots: Float,
+    metrics: RailMetrics
+): List<RailCardLayout> {
+    return List(videoCount) { index ->
+        val baseSlot = circularIndex(index - focusedIndex, videoCount).toFloat() + dragSlots
+        val visibleSlot = firstVisibleSlot(
+            baseSlot = baseSlot,
+            itemCount = videoCount,
+            visibleSlots = metrics.visibleSlots
+        ) ?: return@List null
+
+        RailCardLayout(
+            index = index,
+            xPx = metrics.xForSlot(visibleSlot.slot),
+            focusProgress = focusProgressFromSlot(visibleSlot.slot),
+            selectedSlot = index == focusedIndex && visibleSlot.usesBaseSlot
+        )
+    }
+        .filterNotNull()
+        .sortedByRailDepth()
+}
+
+private fun Collection<RailCardLayout>.sortedByRailDepth(): List<RailCardLayout> {
+    return sortedWith(
+        compareBy<RailCardLayout> { it.focusProgress }
+            .thenBy { it.index }
     )
 }
 
-private fun visibleCircularSlot(
+private fun firstVisibleSlot(
     baseSlot: Float,
     itemCount: Int,
     visibleSlots: Int
-): Float? {
+): VisibleSlot? {
     val firstCandidate = baseSlot - itemCount
-    if (firstCandidate.isVisibleRailSlot(visibleSlots)) return firstCandidate
+    if (firstCandidate.isVisibleRailSlot(visibleSlots)) {
+        return VisibleSlot(slot = firstCandidate, usesBaseSlot = false)
+    }
 
-    if (baseSlot.isVisibleRailSlot(visibleSlots)) return baseSlot
+    if (baseSlot.isVisibleRailSlot(visibleSlots)) {
+        return VisibleSlot(slot = baseSlot, usesBaseSlot = true)
+    }
 
     val lastCandidate = baseSlot + itemCount
-    return if (lastCandidate.isVisibleRailSlot(visibleSlots)) lastCandidate else null
+    return if (lastCandidate.isVisibleRailSlot(visibleSlots)) {
+        VisibleSlot(slot = lastCandidate, usesBaseSlot = false)
+    } else {
+        null
+    }
 }
+
+private data class VisibleSlot(
+    val slot: Float,
+    val usesBaseSlot: Boolean
+)
 
 private fun Float.isVisibleRailSlot(visibleSlots: Int): Boolean {
     return this >= -1.15f && this <= visibleSlots + 0.35f

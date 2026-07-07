@@ -18,7 +18,7 @@ Out of scope by current design:
 The production exhibition assumption is that media is bundled with the APK and selected inside the app. Current media is stored under:
 
 ```text
-app/src/main/assets/
+app/src/main/assets/fileVideoSample/
 ```
 
 This makes each video addressable by stable asset path instead of generated `R.raw` ids.
@@ -30,7 +30,7 @@ flowchart TD
   Launch["Launcher"] --> LibraryActivity["VideoLibraryActivity"]
   LibraryActivity --> LibraryVM["VideoLibraryViewModel"]
   LibraryVM --> AssetRepo["AssetVideoRepository"]
-  AssetRepo --> Assets["app/src/main/assets/*.mp4"]
+  AssetRepo --> Assets["app/src/main/assets/fileVideoSample/*.mp4"]
   LibraryActivity --> LibraryScreen["VideoLibraryScreen"]
   LibraryScreen --> Rail["VideoRail"]
   Rail --> Contract["FrontPlayerContract"]
@@ -53,7 +53,7 @@ flowchart TD
 | `data/provider` | Provider boundaries such as driving restriction state. |
 | `domain/sharing` | Share-session state model. |
 | `ext` | Media3 extension helpers adapted from the reference app's playback-state utilities. |
-| `session` | Long-lived app playback/share controllers. |
+| `session` | Long-lived app playback, PiP, and host share-playback controllers. |
 | `render` | One decoded video frame fanout to local surfaces. |
 | `display/presentation` | Android `Presentation` windows for external displays. |
 | `ui` | Activity shell and navigation contract. |
@@ -97,11 +97,11 @@ These may be required for AAOS system media integration later, but they are inte
 
 `AssetVideo` is the library item model:
 
-- `assetPath`: stable path inside APK assets, used as identity and cache key.
+- `assetPath`: stable path inside APK assets, including `fileVideoSample/`, used as identity and cache key.
 - `fileName`: original asset file name.
 - `title`: display title derived from the file name.
 
-`AssetVideoRepository` scans `AssetManager` recursively and accepts:
+`AssetVideoRepository` scans only `assets/fileVideoSample/` recursively and accepts:
 
 - `.mp4`
 - `.m4v`
@@ -119,7 +119,7 @@ This keeps raw asset traversal out of the ViewModel and Compose UI. The UI only 
 `VideoSource.Asset` converts the selected asset into a Media3 item using:
 
 ```text
-asset:///path/to/video.mp4
+asset:///fileVideoSample/video.mp4
 ```
 
 Why assets instead of `res/raw`:
@@ -140,9 +140,9 @@ Profiles:
 | Profile | Resolution | Use |
 |---|---:|---|
 | `Rail` | 640x360 | Carousel cards. |
-| `Background` | 640x360 | Settled library background. |
+| `Background` | 1280x720 | Settled library background cached for Dolphin 5 demo stability. |
 
-Both profiles intentionally stay at 16:9 and 640x360. This limits decode time, GPU upload cost, and memory bandwidth on automotive SoCs such as Telechips Dolphin 5.
+Both profiles stay at 16:9. Rail thumbnails stay small to limit drag cost. Background images are generated once and cached in app-internal storage for Dolphin 5 demo stability.
 
 Approximate ARGB memory cost:
 
@@ -154,10 +154,17 @@ Approximate ARGB memory cost:
 
 Current policy:
 
-- Decode thumbnails serially to reduce startup spikes.
-- Cache by `assetPath + profile size`.
-- Use committed focus for background updates.
-- Do not decode large backgrounds continuously during rail drag.
+- Decode thumbnails/background frames serially to reduce startup spikes.
+- Memory cache by `assetPath + profile size`.
+- Persist 1280x720 background images under app internal storage:
+
+```text
+filesDir/media_background_cache/
+```
+
+- Warm the 1280x720 background disk cache in `VideoLibraryViewModel` after the first library frame.
+- Use committed focus for background updates; rail drag preview does not swap the background.
+- Do not keep all background images resident in memory.
 
 ## 6. Playback Session
 
@@ -175,6 +182,16 @@ This protects playback during transitions:
 - fullscreen player with shared displays -> library PiP
 
 The player is stopped only when the app explicitly ends playback, not when switching between fullscreen and app-scoped PiP.
+
+`HostSharePlaybackController` owns host-side share playback decisions:
+
+- pause/resume around the share-target dialog
+- share anchor capture
+- pending shared-start coroutine cancellation
+- accepted/denied/ended notification playback consequences
+- final shared-start seek/preroll timing after accepted displays are ready
+
+`FrontPlayerActivity` keeps UI state, display selection, lifecycle, and navigation only.
 
 ## 7. Render Pipeline
 
@@ -215,7 +232,7 @@ Share startup:
 6. Accepted presentations register their `SurfaceView` output with the render engine.
 7. Denied presentations are removed from the session before playback starts.
 8. A display is considered ready only after it accepted and EGL output creation succeeds.
-9. When all request responses are resolved and accepted displays are ready, host seeks to the anchor position and starts playback.
+9. When all request responses are resolved and accepted displays are ready, host seeks to the anchor position and starts playback if it has not already resumed.
 
 This is frame fanout from one decoder, not independent receiver synchronization.
 
@@ -236,6 +253,8 @@ Library:
 - Rail thumbnails are 640x360.
 - Library PiP is sized to the focused rail-card dimensions.
 - Library PiP is top-right with `top = 56.dp` and `end = 28.dp`.
+- Clicking library PiP reorders/opens `FrontPlayerActivity` and restores fullscreen mode for the current `VideoSource.Asset`.
+- Circular rail wrap uses slot-based selection, so wrapped copies of the focused video still show their side-card title.
 
 Player:
 
@@ -245,6 +264,7 @@ Player:
 - Seekbar canvas is `48.dp` high.
 - Seekbar track is `12.dp`, using `#22262A` as the base track.
 - Seekbar progress uses a left-to-right `#41E3B6` to `#6A6AF9` gradient.
+- Seekbar position text/thumb refreshes every `500 ms` only while controls are visible, playback is active, and the user is not dragging.
 - Transport icons use original drawable colors with no tint.
 
 Shared display:
@@ -297,3 +317,9 @@ For long-running exhibition devices:
 - [x] No dependency injection framework is used.
 - [x] AAOS MediaService/MediaLibrary/MediaDatabaseHelper path is documented but deferred.
 - [x] Asset scanning is normalized before the library UI receives display items.
+- [x] Asset scanning is scoped to `assets/fileVideoSample/`.
+- [x] Background thumbnail profile is 1280x720 and persisted to app-internal storage.
+- [x] Host share playback decisions are owned by `HostSharePlaybackController`.
+- [x] Library PiP click returns to fullscreen `FrontPlayerActivity`.
+- [x] Circular rail wrap keeps side-card titles visible.
+- [x] Player seekbar progress tick is reduced to `500 ms`.

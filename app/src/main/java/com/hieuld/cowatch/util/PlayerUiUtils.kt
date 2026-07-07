@@ -1,8 +1,7 @@
-package com.hieuld.cowatch.ui.player
+package com.hieuld.cowatch.util
 
 import androidx.media3.common.Player
 import com.hieuld.cowatch.ext.resolveDisplayTitle
-import com.hieuld.cowatch.util.formatDurationClock
 
 internal fun Throwable.hasAudioTrackInitializationFailure(): Boolean {
     var current: Throwable? = this

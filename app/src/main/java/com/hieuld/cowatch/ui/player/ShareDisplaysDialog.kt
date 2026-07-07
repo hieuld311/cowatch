@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.hieuld.cowatch.domain.display.DisplayInfo
@@ -46,8 +47,10 @@ internal fun ShareDisplaysDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Share media playback",
+                text = "Broadcast Video",
+                modifier = Modifier.fillMaxWidth(),
                 style = MaterialTheme.typography.titleLarge,
+                textAlign = TextAlign.Center,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.SemiBold
             )
@@ -115,7 +118,7 @@ internal fun ShareDisplaysDialog(
                 )
             ) {
                 Text(
-                    text = "Start",
+                    text = "Broadcast",
                     fontFamily = FontFamily.Monospace
                 )
             }

@@ -70,21 +70,15 @@ internal fun VideoRailCard(
                 contentScale = ContentScale.Crop
             )
             if (selected) {
-                Box(
+                Image(
+                    painter = painterResource(R.drawable.ico_media_play_l_p),
+                    contentDescription = "Play",
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .padding(10.dp)
                         // 44dp icon footprint keeps selected cards stable and matches the original drawable size.
                         .size(44.dp)
-                ) {
-                    Image(
-                        painter = painterResource(R.drawable.ico_media_play_l_p),
-                        contentDescription = "Play",
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .size(44.dp)
-                    )
-                }
+                )
             }
         }
 

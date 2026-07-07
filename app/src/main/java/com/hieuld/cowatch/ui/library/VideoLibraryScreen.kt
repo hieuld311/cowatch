@@ -1,5 +1,6 @@
 package com.hieuld.cowatch.ui.library
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -8,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -39,66 +39,63 @@ fun VideoLibraryScreen(
     var containerWidthPx by remember { mutableIntStateOf(1) }
     val displayFocusedIndex = previewFocusedIndex ?: focusedIndex
     val focusedVideo = videos.getOrNull(displayFocusedIndex)
+    val backgroundVideo = videos.getOrNull(focusedIndex)
     val density = LocalDensity.current
     val railMetrics = rememberRailMetrics(
         videoCount = videos.size,
         containerWidthPx = containerWidthPx
     )
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = ExplorerSurfaceColor
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(ExplorerSurfaceColor)
+            .onSizeChanged { containerWidthPx = it.width.coerceAtLeast(1) }
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .onSizeChanged { containerWidthPx = it.width.coerceAtLeast(1) }
-        ) {
-            ExplorerBackground(
-                video = focusedVideo,
-                modifier = Modifier.fillMaxSize()
+        ExplorerBackground(
+            video = backgroundVideo,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        Column(modifier = Modifier.fillMaxSize()) {
+            Spacer(modifier = Modifier.weight(1f))
+
+            focusedVideo?.let { video ->
+                Text(
+                    text = video.title,
+                    modifier = Modifier.padding(start = 28.dp, bottom = 12.dp),
+                    color = ExplorerTitleColor,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            VideoRail(
+                videos = videos,
+                focusedIndex = focusedIndex,
+                onFocusChanged = { focusedIndex = it },
+                onFocusPreviewChanged = { previewFocusedIndex = it },
+                onFocusPreviewCleared = { previewFocusedIndex = null },
+                onVideoSelected = onVideoSelected
             )
+        }
 
-            Column(modifier = Modifier.fillMaxSize()) {
-                Spacer(modifier = Modifier.weight(1f))
-
-                focusedVideo?.let { video ->
-                    Text(
-                        text = video.title,
-                        modifier = Modifier.padding(start = 28.dp, bottom = 12.dp),
-                        color = ExplorerTitleColor,
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+        if (pipState != null) {
+            LibraryPipPlayer(
+                onClick = onPipSelected,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    // PiP keeps fixed library padding while matching the focused rail-card video size.
+                    .padding(
+                        top = 56.dp,
+                        end = 28.dp
                     )
-                }
-
-                VideoRail(
-                    videos = videos,
-                    focusedIndex = focusedIndex,
-                    onFocusChanged = { focusedIndex = it },
-                    onFocusPreviewChanged = { previewFocusedIndex = it },
-                    onFocusPreviewCleared = { previewFocusedIndex = null },
-                    onVideoSelected = onVideoSelected
-                )
-            }
-
-            if (pipState != null) {
-                LibraryPipPlayer(
-                    onClick = onPipSelected,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        // PiP keeps fixed library padding while matching the focused rail-card video size.
-                        .padding(
-                            top = 56.dp,
-                            end = 28.dp
-                        )
-                        .width(with(density) { railMetrics.focusedWidthPx.toDp() })
-                        .height(with(density) { railMetrics.focusedHeightPx.toDp() })
-                )
-            }
+                    .width(with(density) { railMetrics.focusedWidthPx.toDp() })
+                    .height(with(density) { railMetrics.focusedHeightPx.toDp() })
+            )
         }
     }
 }

@@ -12,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -37,7 +38,7 @@ internal fun VideoSeekBar(
 
     Canvas(
         modifier = modifier
-            // 48dp hit area keeps the 6dp visual track easy to touch in a vehicle display.
+            // 48dp hit area keeps the 12dp visual track easy to touch in a vehicle display.
             .height(48.dp)
             .onSizeChanged { size -> widthPx = size.width.coerceAtLeast(1) }
             .pointerInput(enabled, durationMs) {
@@ -72,18 +73,25 @@ internal fun VideoSeekBar(
         }
         val progressX = size.width * progress
         // Visual track/thumb sizes are density-aware dp, converted to px inside Canvas.
-        val strokeWidth = 6.dp.toPx()
+        val strokeWidth = 12.dp.toPx()
         val thumbRadius = 12.dp.toPx()
 
         drawLine(
-            color = Color(0xFF777777),
+            color = Color(0xFF22262A),
             start = Offset(0f, trackY),
             end = Offset(size.width, trackY),
             strokeWidth = strokeWidth,
             cap = StrokeCap.Round
         )
         drawLine(
-            color = Color(0xFF111111),
+            brush = Brush.horizontalGradient(
+                colors = listOf(
+                    Color(0xFF41E3B6),
+                    Color(0xFF6A6AF9)
+                ),
+                startX = 0f,
+                endX = progressX.coerceAtLeast(1f)
+            ),
             start = Offset(0f, trackY),
             end = Offset(progressX, trackY),
             strokeWidth = strokeWidth,

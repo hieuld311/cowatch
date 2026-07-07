@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class FrontPlayerViewModel(application: Application) : AndroidViewModel(application) {
 
     val session = ShareSessionController.session
+    val hostNotifications = ShareSessionController.hostNotifications
 
     private val _playbackState =
         MutableStateFlow<CoWatchPlaybackState>(CoWatchPlaybackState.Idle)
@@ -24,6 +25,7 @@ class FrontPlayerViewModel(application: Application) : AndroidViewModel(applicat
 
     fun startSharing(
         context: Context,
+        videoTitle: String,
         hostDisplayId: Int,
         targetDisplayIds: Set<Int>,
         anchorPositionMs: Long,
@@ -32,6 +34,7 @@ class FrontPlayerViewModel(application: Application) : AndroidViewModel(applicat
     ): Boolean {
         return ShareSessionController.startSharing(
             context = context,
+            videoTitle = videoTitle,
             hostDisplayId = hostDisplayId,
             targetDisplayIds = targetDisplayIds,
             anchorPositionMs = anchorPositionMs,
@@ -40,8 +43,10 @@ class FrontPlayerViewModel(application: Application) : AndroidViewModel(applicat
         )
     }
 
-    fun stopSharing() {
-        ShareSessionController.stopSharing()
+    fun stopSharing(
+        notifyEnded: Boolean = true
+    ) {
+        ShareSessionController.stopSharing(notifyEnded = notifyEnded)
     }
 
 }

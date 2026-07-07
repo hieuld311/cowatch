@@ -210,11 +210,22 @@ Share startup:
 1. User opens share target dialog.
 2. Host pauses at the current anchor position.
 3. Selected displays create `Presentation` windows.
-4. Each presentation registers a `SurfaceView` output with the render engine.
-5. A display is considered ready only after EGL output creation succeeds.
-6. When all displays are ready, host seeks to the anchor position and starts playback.
+4. Each presentation shows a receiver request UI: `Accept video broadcast request?`.
+5. Secondary display response is delivered through same-process callbacks, not Intent/Broadcast IPC.
+6. Accepted presentations register their `SurfaceView` output with the render engine.
+7. Denied presentations are removed from the session before playback starts.
+8. A display is considered ready only after it accepted and EGL output creation succeeds.
+9. When all request responses are resolved and accepted displays are ready, host seeks to the anchor position and starts playback.
 
 This is frame fanout from one decoder, not independent receiver synchronization.
+
+Host notification rule:
+
+- Host shows `Video broadcast accepted` if at least one requested display accepts.
+- Host shows `Video broadcast denied` if every requested display denies/dismisses.
+- Host shows `Video broadcast ended` when an active shared session ends while the host player remains visible.
+- Host suppresses `Video broadcast ended` when closing the video destroys `FrontPlayerActivity`.
+- Secondary displays show only the accept/dismiss request UI; result notifications are host-only.
 
 ## 9. UI Sizing and Resolution Rules
 
@@ -232,13 +243,17 @@ Player:
 - Close button is top-right, `64.dp` hit target.
 - Playback control bar is `118.dp` high.
 - Seekbar canvas is `48.dp` high.
-- Seekbar stroke is `6.dp`; thumb radius is `12.dp`.
+- Seekbar track is `12.dp`, using `#22262A` as the base track.
+- Seekbar progress uses a left-to-right `#41E3B6` to `#6A6AF9` gradient.
 - Transport icons use original drawable colors with no tint.
 
 Shared display:
 
 - Presentation video surface fills the whole external display.
 - Shared-display close button is top-right with a `64.dp` hit target and `12.dp` margins.
+- Receiver request panel is centered on the secondary display, `344.dp` wide, with `Dismiss` and `Accept` actions.
+- Receiver request auto-accepts after `10` seconds if the passenger does not choose.
+- Secondary display response is local app-process state, not a broadcast Intent.
 
 ## 10. Color Rules
 

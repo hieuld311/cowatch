@@ -22,6 +22,7 @@ import com.hieuld.cowatch.domain.display.DisplayInfo
 import com.hieuld.cowatch.domain.media.VideoSource
 import com.hieuld.cowatch.domain.playback.CoWatchPlaybackState
 import com.hieuld.cowatch.domain.sharing.CoWatchSessionStatus
+import com.hieuld.cowatch.domain.sharing.ShareHostNotification
 import com.hieuld.cowatch.render.FrameFanoutRenderEngine
 import com.hieuld.cowatch.session.AppPlaybackSession
 import com.hieuld.cowatch.ui.VideoLibraryActivity
@@ -48,11 +49,14 @@ class FrontPlayerActivity : ComponentActivity() {
     private var pendingSharedStartJob: Job? = null
     private var sharedStartGeneration = 0
     private var resumeAfterShareDialogCancel = false
+    private var resumeAfterShareRequestDenied = false
     private var keepPlaybackForInAppPip = false
 
     private val broadcastEnabledState = mutableStateOf(false)
     private val shareDialogVisibleState = mutableStateOf(false)
     private val shareTargetsState = mutableStateOf(emptyList<DisplayInfo>())
+    private val hostNotificationState = mutableStateOf<String?>(null)
+    private var hostNotificationJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -71,6 +75,7 @@ class FrontPlayerActivity : ComponentActivity() {
 
         setupPlayer(source)
         observeShareSession()
+        observeHostNotifications()
         applyFullscreenMode(true)
 
         setContent {
@@ -81,6 +86,7 @@ class FrontPlayerActivity : ComponentActivity() {
                     broadcastChecked = broadcastEnabledState.value,
                     showShareDialog = shareDialogVisibleState.value,
                     displays = shareTargetsState.value,
+                    hostNotificationText = hostNotificationState.value,
                     onBroadcastCheckedChange = ::onBroadcastCheckedChange,
                     onShareDialogDismiss = ::onShareDialogDismissedWithoutSharing,
                     onStartSharing = ::onStartSharing,
@@ -194,7 +200,7 @@ class FrontPlayerActivity : ComponentActivity() {
             cancelPendingSharedStart()
             clearPendingShareDialogResume()
             clearShareDialog()
-            viewModel.stopSharing()
+            viewModel.stopSharing(notifyEnded = true)
             updatePlaybackStateFromPlayer()
         }
     }
@@ -222,6 +228,7 @@ class FrontPlayerActivity : ComponentActivity() {
 
         val anchorPositionMs = player.currentPosition
         val wasPlayingBeforeShare = player.isPlaying
+        resumeAfterShareRequestDenied = wasPlayingBeforeShare
         // Freeze the single decoder until all selected Presentation surfaces are attached.
         pauseAtShareAnchor(anchorPositionMs)
         viewModel.setPlaybackState(CoWatchPlaybackState.SharingPreparing)
@@ -232,6 +239,7 @@ class FrontPlayerActivity : ComponentActivity() {
 
         val sharingStarted = viewModel.startSharing(
             context = this,
+            videoTitle = AppPlaybackSession.currentSource?.title ?: "Video Title",
             hostDisplayId = getCurrentDisplayId(),
             targetDisplayIds = displayIds,
             anchorPositionMs = anchorPositionMs,
@@ -244,6 +252,7 @@ class FrontPlayerActivity : ComponentActivity() {
         if (!sharingStarted) {
             cancelPendingSharedStart()
             broadcastEnabledState.value = false
+            resumeAfterShareRequestDenied = false
             restorePlaybackAfterShareStartFailure(wasPlayingBeforeShare)
         }
     }
@@ -260,7 +269,7 @@ class FrontPlayerActivity : ComponentActivity() {
 
     private fun onBackToLibrary() {
         cancelPendingSharedStart()
-        viewModel.stopSharing()
+        viewModel.stopSharing(notifyEnded = false)
         viewModel.setPlaybackState(CoWatchPlaybackState.Idle)
         AppPlaybackSession.stop()
         finish()
@@ -344,6 +353,7 @@ class FrontPlayerActivity : ComponentActivity() {
             }
 
             pendingSharedStartJob = null
+            resumeAfterShareRequestDenied = false
             Log.i(TAG, "Starting shared playback at ${player.currentPosition}.")
             player.play()
             viewModel.setPlaybackState(CoWatchPlaybackState.Sharing)
@@ -380,6 +390,42 @@ class FrontPlayerActivity : ComponentActivity() {
 
     private fun clearPendingShareDialogResume() {
         resumeAfterShareDialogCancel = false
+    }
+
+    private fun observeHostNotifications() {
+        lifecycleScope.launch {
+            viewModel.hostNotifications.collectLatest { notification ->
+                showHostNotification(notification.message)
+
+                when (notification) {
+                    ShareHostNotification.ACCEPTED -> Unit
+                    ShareHostNotification.DENIED -> {
+                        cancelPendingSharedStart()
+                        broadcastEnabledState.value = false
+                        restorePlaybackAfterShareStartFailure(resumeAfterShareRequestDenied)
+                        resumeAfterShareRequestDenied = false
+                    }
+                    ShareHostNotification.ENDED -> {
+                        if (resumeAfterShareRequestDenied && !player.isPlaying) {
+                            restorePlaybackAfterShareStartFailure(resumeAfterShareRequestDenied)
+                        }
+                        resumeAfterShareRequestDenied = false
+                        updatePlaybackStateFromPlayer()
+                    }
+                }
+            }
+        }
+    }
+
+    private fun showHostNotification(message: String) {
+        hostNotificationJob?.cancel()
+        hostNotificationState.value = message
+        hostNotificationJob = lifecycleScope.launch {
+            delay(HOST_NOTIFICATION_DURATION_MS)
+            if (hostNotificationState.value == message) {
+                hostNotificationState.value = null
+            }
+        }
     }
 
     private fun updatePlaybackStateFromPlayer() {
@@ -424,13 +470,14 @@ class FrontPlayerActivity : ComponentActivity() {
 
         if (::viewModel.isInitialized) {
             if (!keepPlaybackForInAppPip) {
-                viewModel.stopSharing()
+                viewModel.stopSharing(notifyEnded = false)
                 viewModel.setPlaybackState(CoWatchPlaybackState.Idle)
             }
         }
 
         if (::player.isInitialized) {
             cancelPendingSharedStart()
+            hostNotificationJob?.cancel()
             player.removeListener(playerListener)
             if (!keepPlaybackForInAppPip && !isChangingConfigurations) {
                 AppPlaybackSession.detachRenderEngine(renderEngine)
@@ -456,5 +503,6 @@ class FrontPlayerActivity : ComponentActivity() {
         private const val SHARED_START_READY_TIMEOUT_MS = 1_000L
         private const val SHARED_START_READY_POLL_MS = 25L
         private const val SHARED_START_PREROLL_MS = 100L
+        private const val HOST_NOTIFICATION_DURATION_MS = 1_600L
     }
 }

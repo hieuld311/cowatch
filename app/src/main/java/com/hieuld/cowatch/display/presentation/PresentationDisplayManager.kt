@@ -8,7 +8,10 @@ import com.hieuld.cowatch.render.VideoRenderEngine
 
 class PresentationDisplayManager(
     private val context: Context,
+    private val videoTitle: String,
     private val renderEngine: VideoRenderEngine,
+    private val onDisplayAccepted: (displayId: Int) -> Unit,
+    private val onDisplayDenied: (displayId: Int) -> Unit,
     private val onDisplayReady: (displayId: Int) -> Unit,
     private val onDisplayRemoved: (displayId: Int) -> Unit
 ) {
@@ -30,7 +33,10 @@ class PresentationDisplayManager(
             val presentation = SecondaryVideoPresentation(
                 context = context,
                 display = display,
+                videoTitle = videoTitle,
                 renderEngine = renderEngine,
+                onBroadcastAccepted = onDisplayAccepted,
+                onBroadcastDismissed = ::handlePresentationDismissed,
                 onSurfaceReady = onDisplayReady,
                 onSurfaceDestroyed = ::handlePresentationSurfaceDestroyed,
                 onCloseRequested = ::dismiss
@@ -62,6 +68,13 @@ class PresentationDisplayManager(
         val presentation = presentations.remove(displayId) ?: return
         Log.i(TAG, "Dismissing presentation on display $displayId.")
         presentation.dismiss()
+    }
+
+    private fun handlePresentationDismissed(displayId: Int) {
+        val presentation = presentations.remove(displayId)
+        Log.i(TAG, "Presentation request dismissed on display $displayId.")
+        onDisplayDenied(displayId)
+        presentation?.dismiss()
     }
 
     private fun handlePresentationSurfaceDestroyed(displayId: Int) {

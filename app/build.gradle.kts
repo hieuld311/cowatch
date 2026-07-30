@@ -1,10 +1,15 @@
+import org.gradle.api.tasks.Exec
+import org.gradle.api.tasks.PathSensitivity
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.hilt)
+    alias(libs.plugins.legacy.kapt)
 }
 
 android {
-    namespace = "com.hieuld.cowatch"
+    namespace = "com.ivi"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
@@ -21,6 +26,32 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    flavorDimensions += "screen"
+    productFlavors {
+        create("cid") {
+            dimension = "screen"
+            applicationIdSuffix = ".cid"
+            versionNameSuffix = "-cid"
+        }
+        create("pid") {
+            dimension = "screen"
+            applicationIdSuffix = ".pid"
+            versionNameSuffix = "-pid"
+        }
+        create("rearLeft") {
+            dimension = "screen"
+            applicationIdSuffix = ".rear.left"
+            versionNameSuffix = "-rear-left"
+            buildConfigField("String", "SCREEN_ROLE", "\"REAR_LEFT\"")
+        }
+        create("rearRight") {
+            dimension = "screen"
+            applicationIdSuffix = ".rear.right"
+            versionNameSuffix = "-rear-right"
+            buildConfigField("String", "SCREEN_ROLE", "\"REAR_RIGHT\"")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
@@ -31,12 +62,54 @@ android {
         }
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
         compose = true
+        buildConfig = true
+        aidl = true
     }
+    sourceSets {
+        getByName("rearLeft") {
+            kotlin.directories.add("src/rear/java")
+            manifest.srcFile("src/rear/AndroidManifest.xml")
+        }
+        getByName("rearRight") {
+            kotlin.directories.add("src/rear/java")
+            manifest.srcFile("src/rear/AndroidManifest.xml")
+        }
+    }
+}
+
+hilt {
+    enableAggregatingTask = true
+}
+
+val seekPreviewScript = rootProject.layout.projectDirectory.file("tools/generate_seek_previews.ps1")
+val seekPreviewOutput = layout.projectDirectory.dir("src/main/assets/seekPreview")
+val seekPreviewVideos = fileTree("src/main/assets/fileVideoSample") {
+    include("**/*.mp4", "**/*.m4v", "**/*.webm", "**/*.mkv")
+}
+
+val generateSeekPreviews by tasks.registering(Exec::class) {
+    group = "build"
+    description = "Generates seek-preview frames shared by PID, CID, and rear apps."
+    inputs.files(seekPreviewVideos).withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(seekPreviewScript).withPathSensitivity(PathSensitivity.RELATIVE)
+    outputs.dir(seekPreviewOutput)
+    commandLine(
+        "powershell.exe",
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        seekPreviewScript.asFile.absolutePath,
+    )
+}
+
+tasks.named("preBuild") {
+    dependsOn(generateSeekPreviews)
 }
 
 dependencies {
@@ -49,9 +122,14 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.media3:media3-exoplayer:1.5.1")
+    implementation("androidx.media3:media3-session:1.5.1")
+    implementation("androidx.media3:media3-ui:1.5.1")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation(libs.hilt.android)
+    kapt(libs.hilt.compiler)
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)

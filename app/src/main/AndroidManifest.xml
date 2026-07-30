@@ -1,5 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <permission
+        android:name="com.hieuld.cowatch.permission.SHARE_PLAYBACK"
+        android:protectionLevel="signature" />
+
     <uses-permission android:name="android.permission.INTERNET" />
 
     <uses-feature
@@ -7,31 +11,14 @@
         android:required="false" />
 
     <application
+        android:name="com.ivi.app.IVIApplication"
         android:theme="@style/AppTheme"
         android:label="@string/app_name"
+        android:icon="@drawable/ico_general_media_s"
         android:resizeableActivity="true"
         android:supportsRtl="true">
 
         <profileable android:shell="true" />
-
-        <activity
-            android:name=".ui.FrontPlayerActivity"
-            android:exported="false"
-            android:resizeableActivity="true"
-            android:launchMode="singleTop" />
-
-        <activity
-            android:name=".ui.VideoLibraryActivity"
-            android:exported="true"
-            android:resizeableActivity="true"
-            android:launchMode="singleTop">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-
     </application>
 
 </manifest>

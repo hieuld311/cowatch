@@ -1,0 +1,32 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="com.hieuld.cowatch.permission.SHARE_PLAYBACK" />
+    <uses-feature android:name="android.hardware.type.automotive" android:required="false" />
+
+    <application
+        android:theme="@style/AppTheme"
+        android:resizeableActivity="true"
+        android:supportsRtl="true">
+        <activity
+            android:name="com.ivi.rear.ui.ReceiverConsentActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:permission="com.hieuld.cowatch.permission.SHARE_PLAYBACK"
+            android:resizeableActivity="true" />
+        <activity
+            android:name="com.ivi.rear.ui.FrontPlayerActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:resizeableActivity="true" />
+        <activity
+            android:name="com.ivi.rear.ui.VideoLibraryActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:resizeableActivity="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

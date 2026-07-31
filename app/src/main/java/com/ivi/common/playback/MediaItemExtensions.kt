@@ -6,7 +6,7 @@ import com.ivi.common.domain.VideoSource
 
 fun VideoSource.Asset.toMediaItem(): MediaItem {
     return MediaItem.Builder()
-        .setUri("asset:///$assetPath")
+        .setUri(if (isPackagedAsset) "asset:///$assetPath" else assetPath)
         .setMediaMetadata(
             MediaMetadata.Builder()
                 .setTitle(title)

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.AssetManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.util.Log
 import android.util.LruCache
 import com.ivi.common.media.SeekFrameDecoder
@@ -82,6 +83,8 @@ class AssetSeekFrameProvider @Inject constructor(
     private val assets = context.applicationContext.assets
 
     override fun open(assetPath: String): SeekFrameDecoder? {
+        // USB videos do not have pre-generated assets/seekPreview data yet.
+        if (Uri.parse(assetPath).scheme != null) return null
         return AssetSeekFrameDecoder.open(assets, assetPath)
     }
 }

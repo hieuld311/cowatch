@@ -70,6 +70,14 @@ android {
         buildConfig = true
         aidl = true
     }
+    // Thumbnail decoding uses AssetManager.openFd(), which requires stored (uncompressed) assets.
+    androidResources {
+        noCompress += "mp4"
+        noCompress += "m4v"
+        noCompress += "webm"
+        noCompress += "mkv"
+        noCompress += "mov"
+    }
     sourceSets {
         getByName("rearLeft") {
             kotlin.directories.add("src/rear/java")
@@ -89,7 +97,7 @@ hilt {
 val seekPreviewScript = rootProject.layout.projectDirectory.file("tools/generate_seek_previews.ps1")
 val seekPreviewOutput = layout.projectDirectory.dir("src/main/assets/seekPreview")
 val seekPreviewVideos = fileTree("src/main/assets/fileVideoSample") {
-    include("**/*.mp4", "**/*.m4v", "**/*.webm", "**/*.mkv")
+    include("**/*.mp4", "**/*.m4v", "**/*.webm", "**/*.mkv", "**/*.mov")
 }
 
 val generateSeekPreviews by tasks.registering(Exec::class) {

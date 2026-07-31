@@ -5,6 +5,7 @@ sealed interface VideoSource {
 
     data class Asset(
         val assetPath: String,
-        override val title: String
+        override val title: String,
+        val isPackagedAsset: Boolean = true
     ) : VideoSource
 }

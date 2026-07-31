@@ -12,6 +12,7 @@ object CIDVideoNavigation {
     private const val EXTRA_SOURCE_TYPE = "com.ivi.cid.extra.SOURCE_TYPE"
     private const val EXTRA_VIDEO_ASSET_PATH = "com.ivi.cid.extra.VIDEO_ASSET_PATH"
     private const val EXTRA_VIDEO_TITLE = "com.ivi.cid.extra.VIDEO_TITLE"
+    private const val EXTRA_PACKAGED_ASSET = "com.ivi.cid.extra.PACKAGED_ASSET"
 
     // Keep all player Intent extras centralized so Activity recreation and future source types stay stable.
     fun createIntent(context: Context, video: AssetVideo): Intent {
@@ -32,6 +33,7 @@ object CIDVideoNavigation {
             .putExtra(EXTRA_SOURCE_TYPE, SOURCE_TYPE_ASSET)
             .putExtra(EXTRA_VIDEO_ASSET_PATH, source.assetPath)
             .putExtra(EXTRA_VIDEO_TITLE, source.title)
+            .putExtra(EXTRA_PACKAGED_ASSET, source.isPackagedAsset)
     }
 
     // Rebuild the source from primitive Intent data; never pass media/session objects between activities.
@@ -49,7 +51,8 @@ object CIDVideoNavigation {
 
         return VideoSource.Asset(
             assetPath = assetPath,
-            title = title
+            title = title,
+            isPackagedAsset = intent.getBooleanExtra(EXTRA_PACKAGED_ASSET, true)
         )
     }
 }

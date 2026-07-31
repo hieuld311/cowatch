@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
+import android.net.Uri
 import android.util.Log
 import android.util.LruCache
 import com.ivi.common.domain.AssetVideo
@@ -61,7 +62,7 @@ class AssetVideoThumbnailCache @Inject constructor(
             cache.get(cacheKey)
         }?.let { return it }
 
-        if (profile.persistentDiskCache) {
+        if (video.usesPersistentCache(profile)) {
             loadDiskCachedBitmap(video, profile)?.let { bitmap ->
                 synchronized(cacheLock) {
                     cache.get(cacheKey) ?: bitmap.also { cache.put(cacheKey, it) }
@@ -76,7 +77,7 @@ class AssetVideoThumbnailCache @Inject constructor(
                 cache.get(cacheKey)
             }?.let { return@withPermit it }
 
-            if (profile.persistentDiskCache) {
+            if (video.usesPersistentCache(profile)) {
                 loadDiskCachedBitmap(video, profile)?.let { bitmap ->
                     return@withPermit synchronized(cacheLock) {
                         cache.get(cacheKey) ?: bitmap.also { cache.put(cacheKey, it) }
@@ -85,7 +86,7 @@ class AssetVideoThumbnailCache @Inject constructor(
             }
 
             val bitmap = decodeThumbnail(video, profile) ?: return@withPermit null
-            if (profile.persistentDiskCache) {
+            if (video.usesPersistentCache(profile)) {
                 writeDiskCachedBitmap(video, profile, bitmap)
             }
             synchronized(cacheLock) {
@@ -98,9 +99,8 @@ class AssetVideoThumbnailCache @Inject constructor(
         videos: List<AssetVideo>,
         profile: ThumbnailProfile
     ) {
-        if (!profile.persistentDiskCache) return
-
         videos.forEach { video ->
+            if (!video.usesPersistentCache(profile)) return@forEach
             if (diskCacheFile(video, profile).isFile) return@forEach
 
             decodeSemaphore.withPermit {
@@ -120,35 +120,45 @@ class AssetVideoThumbnailCache @Inject constructor(
         )
     }
 
+    private fun AssetVideo.usesPersistentCache(profile: ThumbnailProfile): Boolean {
+        return isPackagedAsset && profile.persistentDiskCache
+    }
+
     private fun decodeThumbnail(
         video: AssetVideo,
         profile: ThumbnailProfile
     ): Bitmap? {
         val retriever = MediaMetadataRetriever()
         return try {
-            // Assets are packaged in the APK; openFd gives retriever an offset/length into that packaged file.
-            appContext.assets.openFd(video.assetPath).use { afd ->
-                retriever.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
-                retriever.getScaledFrameAtTime(
-                    THUMBNAIL_FRAME_US,
-                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
-                    profile.width,
-                    profile.height
-                ) ?: retriever.getFrameAtTime(
-                    THUMBNAIL_FRAME_US,
-                    MediaMetadataRetriever.OPTION_CLOSEST_SYNC
-                )
+            if (video.isPackagedAsset) {
+                // Assets are packaged in the APK; openFd gives retriever an offset/length into that packaged file.
+                appContext.assets.openFd(video.assetPath).use { afd ->
+                    retriever.setDataSource(afd.fileDescriptor, afd.startOffset, afd.length)
+                    retriever.decodeScaledFrame(profile)
+                }
+            } else {
+                retriever.setDataSource(appContext, Uri.parse(video.assetPath))
+                retriever.decodeScaledFrame(profile)
             }
         } catch (throwable: Throwable) {
             Log.e(
                 TAG_VIDEO_LIBRARY,
-                "Asset thumbnail load failed title=${video.title}, assetPath=${video.assetPath}",
+                "Thumbnail load failed title=${video.title}, source=${video.assetPath}",
                 throwable
             )
             null
         } finally {
             retriever.release()
         }
+    }
+
+    private fun MediaMetadataRetriever.decodeScaledFrame(profile: ThumbnailProfile): Bitmap? {
+        return getScaledFrameAtTime(
+            THUMBNAIL_FRAME_US,
+            MediaMetadataRetriever.OPTION_CLOSEST_SYNC,
+            profile.width,
+            profile.height
+        ) ?: getFrameAtTime(THUMBNAIL_FRAME_US, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
     }
 
     private fun loadDiskCachedBitmap(

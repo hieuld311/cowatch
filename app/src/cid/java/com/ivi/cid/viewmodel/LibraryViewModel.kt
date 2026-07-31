@@ -8,7 +8,6 @@ import com.ivi.common.domain.VideoCatalogRepository
 import com.ivi.cid.ui.LibraryUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -41,9 +40,14 @@ class LibraryViewModel @Inject constructor(
         )
 
     init {
-        viewModelScope.launch(Dispatchers.IO) {
-            val catalog = videoCatalogRepository.listVideos()
-            videos.value = catalog
+        viewModelScope.launch {
+            videoCatalogRepository.observeVideos().collect { catalog ->
+                val source = playbackController.playbackState.value.activeSource
+                if (source != null && !source.isPackagedAsset && catalog.none { it.assetPath == source.assetPath }) {
+                    playbackController.stop()
+                }
+                videos.value = catalog
+            }
         }
     }
 

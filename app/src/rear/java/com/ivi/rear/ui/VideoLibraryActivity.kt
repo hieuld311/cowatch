@@ -1,6 +1,7 @@
 package com.ivi.rear.ui
 
 import android.os.Bundle
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -11,6 +12,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ivi.common.ui.CoWatchTheme
+import com.ivi.common.ui.USB_VIDEO_PERMISSION_REQUEST_CODE
+import com.ivi.common.ui.requestUsbVideoPermissionIfNeeded
 import com.ivi.common.ui.pidlibrary.VideoLibraryScreen
 import com.ivi.rear.viewmodel.VideoLibraryViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -21,6 +24,7 @@ class VideoLibraryActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestUsbVideoPermissionIfNeeded()
         setContent {
             CoWatchTheme {
                 val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -67,5 +71,20 @@ class VideoLibraryActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         display?.displayId?.let(viewModel.shareClient::updateDisplay)
+    }
+
+    @Deprecated("Uses the framework permission callback for the USB read permission.")
+    @Suppress("DEPRECATION")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == USB_VIDEO_PERMISSION_REQUEST_CODE &&
+            grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+        ) {
+            recreate()
+        }
     }
 }

@@ -11,7 +11,6 @@ import com.ivi.pid.sharing.PidShareCoordinator
 import com.ivi.pid.ui.VideoLibraryUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -46,11 +45,13 @@ class VideoLibraryViewModel @Inject constructor(
     )
 
     init {
-        viewModelScope.launch(Dispatchers.IO) {
-            val catalog = videoCatalogRepository.listVideos()
-            videos.value = catalog
-            delay(BACKGROUND_CACHE_WARMUP_DELAY_MS)
-            thumbnailLoader.warmPersistentCache(catalog, ThumbnailProfile.Background)
+        viewModelScope.launch {
+            videoCatalogRepository.observeVideos().collect { catalog ->
+                stopRemovedUsbPlayback(catalog)
+                videos.value = catalog
+                delay(BACKGROUND_CACHE_WARMUP_DELAY_MS)
+                thumbnailLoader.warmPersistentCache(catalog, ThumbnailProfile.Background)
+            }
         }
     }
 
@@ -59,6 +60,14 @@ class VideoLibraryViewModel @Inject constructor(
     fun closePipPlayback() {
         shareCoordinator.stopSharingAll()
         playbackSession.stop()
+    }
+
+    private fun stopRemovedUsbPlayback(catalog: List<AssetVideo>) {
+        val source = playbackSession.currentSource ?: return
+        if (!source.isPackagedAsset && catalog.none { it.assetPath == source.assetPath }) {
+            shareCoordinator.stopSharingAll("USB media was removed")
+            playbackSession.stop()
+        }
     }
 
     private companion object {

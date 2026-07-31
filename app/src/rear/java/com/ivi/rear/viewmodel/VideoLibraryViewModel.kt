@@ -11,7 +11,6 @@ import com.ivi.rear.sharing.RearShareClient
 import com.ivi.rear.ui.RearLibraryUiState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,11 +37,16 @@ class VideoLibraryViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.Eagerly, RearLibraryUiState())
 
     init {
-        viewModelScope.launch(Dispatchers.IO) {
-            val catalog = repository.listVideos()
-            videos.value = catalog
-            delay(750L)
-            thumbnailLoader.warmPersistentCache(catalog, ThumbnailProfile.Background)
+        viewModelScope.launch {
+            repository.observeVideos().collect { catalog ->
+                val source = playbackController.currentSource
+                if (source != null && !source.isPackagedAsset && catalog.none { it.assetPath == source.assetPath }) {
+                    playbackController.stop()
+                }
+                videos.value = catalog
+                delay(750L)
+                thumbnailLoader.warmPersistentCache(catalog, ThumbnailProfile.Background)
+            }
         }
     }
 

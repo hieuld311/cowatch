@@ -1,6 +1,7 @@
 package com.ivi.pid.ui
 
 import android.os.Bundle
+import android.content.pm.PackageManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
@@ -10,6 +11,8 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ivi.common.media.ThumbnailLoader
 import com.ivi.common.ui.CoWatchTheme
+import com.ivi.common.ui.USB_VIDEO_PERMISSION_REQUEST_CODE
+import com.ivi.common.ui.requestUsbVideoPermissionIfNeeded
 import com.ivi.common.playback.Media3PlaybackController
 import com.ivi.common.ui.pidlibrary.VideoLibraryScreen
 import com.ivi.pid.viewmodel.VideoLibraryViewModel
@@ -34,6 +37,7 @@ class VideoLibraryActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestUsbVideoPermissionIfNeeded()
 
         setContent {
             CoWatchTheme {
@@ -79,6 +83,21 @@ class VideoLibraryActivity : ComponentActivity() {
                     }
                 )
             }
+        }
+    }
+
+    @Deprecated("Uses the framework permission callback for the USB read permission.")
+    @Suppress("DEPRECATION")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == USB_VIDEO_PERMISSION_REQUEST_CODE &&
+            grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+        ) {
+            recreate()
         }
     }
 }

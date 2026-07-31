@@ -2,7 +2,6 @@ package com.ivi.rear.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import android.util.Log
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.domain.VideoCatalogRepository
 import com.ivi.common.media.ThumbnailLoader
@@ -40,7 +39,6 @@ class VideoLibraryViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             repository.observeVideos().collect { catalog ->
-                Log.i(TAG, "Rear library catalog=${catalog.size} usb=${catalog.count { !it.isPackagedAsset }}")
                 val source = playbackController.currentSource
                 if (source != null && !source.isPackagedAsset && catalog.none { it.assetPath == source.assetPath }) {
                     playbackController.stop()
@@ -58,9 +56,5 @@ class VideoLibraryViewModel @Inject constructor(
 
     fun closePip() {
         if (shareClient.sharedSession.value == null) playbackController.stop()
-    }
-
-    private companion object {
-        const val TAG = "CoWatchUsbLibrary"
     }
 }

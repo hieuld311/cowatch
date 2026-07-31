@@ -14,7 +14,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ivi.common.ui.CoWatchTheme
 import com.ivi.common.ui.USB_VIDEO_PERMISSION_REQUEST_CODE
 import com.ivi.common.ui.requestUsbVideoPermissionIfNeeded
-import com.ivi.common.ui.logUsbVideoPermissionResult
 import com.ivi.common.ui.pidlibrary.VideoLibraryScreen
 import com.ivi.rear.viewmodel.VideoLibraryViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -83,11 +82,9 @@ class VideoLibraryActivity : ComponentActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == USB_VIDEO_PERMISSION_REQUEST_CODE &&
-            grantResults.isNotEmpty()
+            grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
         ) {
-            val granted = grantResults.first() == PackageManager.PERMISSION_GRANTED
-            logUsbVideoPermissionResult(granted)
-            if (granted) recreate()
+            recreate()
         }
     }
 }

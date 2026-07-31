@@ -2,6 +2,7 @@ package com.ivi.pid.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Log
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.domain.VideoCatalogRepository
 import com.ivi.common.media.ThumbnailLoader
@@ -47,6 +48,7 @@ class VideoLibraryViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             videoCatalogRepository.observeVideos().collect { catalog ->
+                Log.i(TAG, "PID library catalog=${catalog.size} usb=${catalog.count { !it.isPackagedAsset }}")
                 stopRemovedUsbPlayback(catalog)
                 videos.value = catalog
                 delay(BACKGROUND_CACHE_WARMUP_DELAY_MS)
@@ -71,6 +73,7 @@ class VideoLibraryViewModel @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "CoWatchUsbLibrary"
         const val BACKGROUND_CACHE_WARMUP_DELAY_MS = 750L
     }
 }

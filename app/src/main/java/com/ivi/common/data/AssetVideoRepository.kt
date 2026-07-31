@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.Build
 import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
+import android.util.Log
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.domain.VideoCatalogRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -18,7 +19,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Singleton
-class AssetVideoRepository @Inject constructor(
+class
+
+AssetVideoRepository @Inject constructor(
     @param:ApplicationContext private val context: Context
 ) : VideoCatalogRepository {
 
@@ -27,12 +30,20 @@ class AssetVideoRepository @Inject constructor(
     }
 
     override fun observeVideos(): Flow<List<AssetVideo>> = callbackFlow {
-        fun refreshCatalog() {
-            launch(Dispatchers.IO) { trySend(loadCatalog()) }
+        fun refreshCatalog(reason: String) {
+            launch(Dispatchers.IO) {
+                val catalog = loadCatalog()
+                Log.i(
+                    TAG,
+                    "Catalog refresh reason=$reason total=${catalog.size} usb=${catalog.count { !it.isPackagedAsset }}"
+                )
+                trySend(catalog)
+            }
         }
 
-        refreshCatalog()
+        refreshCatalog("initial")
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
+            Log.w(TAG, "USB scan disabled: StorageVolume.directory requires API 30+, sdk=${Build.VERSION.SDK_INT}")
             awaitClose()
             return@callbackFlow
         }
@@ -40,15 +51,24 @@ class AssetVideoRepository @Inject constructor(
         val storageManager = context.getSystemService(StorageManager::class.java)
         val callback = object : StorageManager.StorageVolumeCallback() {
             override fun onStateChanged(volume: StorageVolume) {
-                if (volume.isRemovable && !volume.isPrimary) refreshCatalog()
+                if (volume.isRemovable && !volume.isPrimary) {
+                    Log.i(TAG, "Volume state changed state=${volume.state} directory=${volume.directory}")
+                    refreshCatalog("volume-state=${volume.state}")
+                }
             }
         }
         storageManager.registerStorageVolumeCallback(context.mainExecutor, callback)
-        awaitClose { storageManager.unregisterStorageVolumeCallback(callback) }
+        awaitClose {
+            Log.d(TAG, "Stop observing removable storage")
+            storageManager.unregisterStorageVolumeCallback(callback)
+        }
     }
 
     private fun loadCatalog(): List<AssetVideo> {
-        return (scanAssetVideos() + scanUsbVideos())
+        val assetVideos = scanAssetVideos()
+        val usbVideos = scanUsbVideos()
+        Log.d(TAG, "Catalog scan complete assets=${assetVideos.size} usb=${usbVideos.size}")
+        return (assetVideos + usbVideos)
             .distinctBy { it.assetPath }
             .sortedBy { it.title.lowercase() }
     }
@@ -64,19 +84,30 @@ class AssetVideoRepository @Inject constructor(
     private fun scanUsbVideos(): List<AssetVideo> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return emptyList()
         val storageManager = context.getSystemService(StorageManager::class.java)
-        return storageManager.storageVolumes
-            .asSequence()
+        val removableVolumes = storageManager.storageVolumes
             .filter { it.isRemovable && !it.isPrimary }
-            .mapNotNull { it.directory }
-            .flatMap { root ->
+        Log.i(
+            TAG,
+            "Removable volumes=${removableVolumes.size} ${removableVolumes.joinToString { "state=${it.state}, directory=${it.directory}" }}"
+        )
+        return removableVolumes.flatMap { volume ->
+            val root = volume.directory
+            if (root == null) {
+                Log.w(TAG, "Skip removable volume without a mounted directory state=${volume.state}")
+                emptyList()
+            } else {
                 runCatching {
                     root.walkTopDown()
                         .filter { file -> file.isFile && file.canRead() && MediaFileTypes.isSupportedVideoFileName(file.name) }
                         .map { file -> file.toUsbVideo() }
-                        .asSequence()
-                }.getOrElse { emptySequence() }
+                        .toList()
+                }.onSuccess { videos ->
+                    Log.i(TAG, "USB root=${root.path} videos=${videos.size}")
+                }.onFailure { error ->
+                    Log.e(TAG, "USB scan failed root=${root.path}", error)
+                }.getOrDefault(emptyList())
             }
-            .toList()
+        }
     }
 
     private fun File.toUsbVideo(): AssetVideo {
@@ -122,6 +153,7 @@ class AssetVideoRepository @Inject constructor(
     }
 
     private companion object {
+        const val TAG = "CoWatchUsbCatalog"
         const val VIDEO_ASSET_ROOT = "fileVideoSample"
     }
 }

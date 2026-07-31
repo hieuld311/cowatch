@@ -15,6 +15,7 @@ import com.ivi.cid.viewmodel.LibraryViewModel
 import com.ivi.common.ui.CoWatchTheme
 import com.ivi.common.ui.USB_VIDEO_PERMISSION_REQUEST_CODE
 import com.ivi.common.ui.requestUsbVideoPermissionIfNeeded
+import com.ivi.common.ui.logUsbVideoPermissionResult
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -68,9 +69,11 @@ class VideoLibraryActivity : ComponentActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == USB_VIDEO_PERMISSION_REQUEST_CODE &&
-            grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED
+            grantResults.isNotEmpty()
         ) {
-            recreate()
+            val granted = grantResults.first() == PackageManager.PERMISSION_GRANTED
+            logUsbVideoPermissionResult(granted)
+            if (granted) recreate()
         }
     }
 

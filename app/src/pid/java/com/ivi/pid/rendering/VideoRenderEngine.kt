@@ -7,6 +7,7 @@ interface VideoRenderEngine {
 
     fun addOutputAsync(
         outputId: Int,
+        surfaceGeneration: Long? = null,
         surface: Surface,
         width: Int,
         height: Int,
@@ -14,7 +15,17 @@ interface VideoRenderEngine {
         onResult: (Boolean) -> Unit = {}
     )
 
-    fun removeOutputAsync(outputId: Int)
+    /**
+     * Removes an output only when its generation still matches. This prevents a queued callback
+     * from a destroyed SurfaceView removing the replacement surface that reuses the same output id.
+     */
+    fun removeOutputAsync(outputId: Int, surfaceGeneration: Long? = null)
+
+    /** Hides the prior decoder texture until the current media item has rendered its first frame. */
+    fun waitForFirstFrameAsync()
+
+    /** Makes the latest input texture visible after the player confirms the first frame. */
+    fun allowFramesAsync()
     fun setVideoSize(width: Int, height: Int, pixelWidthHeightRatio: Float = 1f)
     fun release()
 

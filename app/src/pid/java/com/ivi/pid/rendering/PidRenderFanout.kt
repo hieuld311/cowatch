@@ -28,6 +28,10 @@ class PidRenderFanout @Inject constructor(
                     videoSize.pixelWidthHeightRatio
                 )
             }
+
+            override fun onRenderedFirstFrame() {
+                engine.allowFramesAsync()
+            }
         })
         ensureAttached()
     }
@@ -41,9 +45,12 @@ class PidRenderFanout @Inject constructor(
         onResult: (Boolean) -> Unit = {}
     ) {
         ensureAttached()
+        val activeGeneration = localOutputGenerations[outputId]
+        if (activeGeneration != null && activeGeneration > surfaceGeneration) return
         localOutputGenerations[outputId] = surfaceGeneration
         engine.addOutputAsync(
             outputId = outputId,
+            surfaceGeneration = surfaceGeneration,
             surface = surface,
             width = width,
             height = height,
@@ -54,7 +61,7 @@ class PidRenderFanout @Inject constructor(
     fun removeOutput(outputId: Int, surfaceGeneration: Long? = null) {
         if (surfaceGeneration != null && localOutputGenerations[outputId] != surfaceGeneration) return
         localOutputGenerations.remove(outputId)
-        engine.removeOutputAsync(outputId)
+        engine.removeOutputAsync(outputId, surfaceGeneration)
     }
 
     fun addRearOutput(
@@ -76,6 +83,12 @@ class PidRenderFanout @Inject constructor(
     }
 
     fun removeRearOutput(role: String) = engine.removeOutputAsync(outputId(role))
+
+    /**
+     * The OES texture survives a media-item switch. Keep outputs black until ExoPlayer reports
+     * the new item's first frame, so the previous video's final frame cannot flash.
+     */
+    fun beginSourceTransition() = engine.waitForFirstFrameAsync()
 
     fun setRearOutputLostListener(listener: (role: String, reason: String) -> Unit) {
         rearOutputLostListener = listener

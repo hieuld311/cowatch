@@ -2,6 +2,7 @@ package com.ivi.cid.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import android.util.Log
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.domain.PlaybackController
 import com.ivi.common.domain.VideoCatalogRepository
@@ -42,6 +43,7 @@ class LibraryViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             videoCatalogRepository.observeVideos().collect { catalog ->
+                Log.i(TAG, "CID library catalog=${catalog.size} usb=${catalog.count { !it.isPackagedAsset }}")
                 val source = playbackController.playbackState.value.activeSource
                 if (source != null && !source.isPackagedAsset && catalog.none { it.assetPath == source.assetPath }) {
                     playbackController.stop()
@@ -57,6 +59,7 @@ class LibraryViewModel @Inject constructor(
     fun closePipPlayback() = playbackController.stop()
 
     private companion object {
+        const val TAG = "CoWatchUsbLibrary"
         const val STOP_TIMEOUT_MS = 5_000L
     }
 }

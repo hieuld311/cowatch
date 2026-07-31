@@ -47,6 +47,7 @@ internal class FrameFanoutRenderEngine(
     private var sourceWidth = 0
     private var sourceHeight = 0
     private var sourcePixelRatio = 1f
+    private var framesVisible = true
 
     init {
         Matrix.setIdentityM(textureMatrix, 0)
@@ -62,6 +63,7 @@ internal class FrameFanoutRenderEngine(
 
     override fun addOutputAsync(
         outputId: Int,
+        surfaceGeneration: Long?,
         surface: Surface,
         width: Int,
         height: Int,
@@ -73,12 +75,39 @@ internal class FrameFanoutRenderEngine(
             return
         }
         renderHandler.post {
-            onResult(addOutput(outputId, surface, width, height, releaseSurfaceOnRemoval))
+            onResult(
+                addOutput(
+                    outputId = outputId,
+                    surfaceGeneration = surfaceGeneration,
+                    surface = surface,
+                    width = width,
+                    height = height,
+                    releaseSurfaceOnRemoval = releaseSurfaceOnRemoval
+                )
+            )
         }
     }
 
-    override fun removeOutputAsync(outputId: Int) {
-        if (!released.get()) renderHandler.post { removeOutput(outputId) }
+    override fun removeOutputAsync(outputId: Int, surfaceGeneration: Long?) {
+        if (!released.get()) renderHandler.post { removeOutput(outputId, surfaceGeneration) }
+    }
+
+    override fun waitForFirstFrameAsync() {
+        if (released.get()) return
+        renderHandler.post {
+            framesVisible = false
+            outputs.entries.toList().forEach { (outputId, target) -> clearOutput(outputId, target) }
+            Log.d(TAG, "Holding outputs for the next media item's first frame")
+        }
+    }
+
+    override fun allowFramesAsync() {
+        if (released.get()) return
+        renderHandler.post {
+            framesVisible = true
+            renderFrame()
+            Log.d(TAG, "Showing frames after player first-frame callback")
+        }
     }
 
     override fun setVideoSize(width: Int, height: Int, pixelWidthHeightRatio: Float) {
@@ -87,7 +116,7 @@ internal class FrameFanoutRenderEngine(
             sourceWidth = width
             sourceHeight = height
             sourcePixelRatio = pixelWidthHeightRatio.takeIf { it > 0f } ?: 1f
-            renderFrame()
+            if (framesVisible) renderFrame()
         }
     }
 
@@ -95,7 +124,7 @@ internal class FrameFanoutRenderEngine(
         if (!released.compareAndSet(false, true)) return
         val done = CountDownLatch(1)
         renderHandler.post {
-            outputs.keys.toList().forEach(::removeOutput)
+            outputs.keys.toList().forEach { outputId -> removeOutput(outputId) }
             inputSurface.release()
             inputSurfaceTexture.release()
             if (program != 0) GLES20.glDeleteProgram(program)
@@ -189,7 +218,7 @@ internal class FrameFanoutRenderEngine(
                 if (frameAvailable.getAndSet(false)) {
                     inputSurfaceTexture.updateTexImage()
                     inputSurfaceTexture.getTransformMatrix(textureMatrix)
-                    renderFrame()
+                    if (framesVisible) renderFrame()
                 }
             } finally {
                 frameQueued.set(false)
@@ -211,12 +240,12 @@ internal class FrameFanoutRenderEngine(
 
     private fun renderOutput(outputId: Int, target: OutputTarget) {
         if (!target.surface.isValid) {
-            removeOutput(outputId, "Surface became invalid")
+            removeOutput(outputId, failureReason = "Surface became invalid")
             return
         }
         if (!EGL14.eglMakeCurrent(eglDisplay, target.eglSurface, target.eglSurface, eglContext)) {
             Log.e(TAG, "eglMakeCurrent failed for $outputId: ${eglError()}")
-            removeOutput(outputId, "eglMakeCurrent failed")
+            removeOutput(outputId, failureReason = "eglMakeCurrent failed")
             return
         }
         GLES20.glClearColor(0f, 0f, 0f, 1f)
@@ -226,12 +255,30 @@ internal class FrameFanoutRenderEngine(
         drawQuad()
         if (!EGL14.eglSwapBuffers(eglDisplay, target.eglSurface)) {
             Log.e(TAG, "eglSwapBuffers failed for $outputId: ${eglError()}")
-            removeOutput(outputId, "eglSwapBuffers failed")
+            removeOutput(outputId, failureReason = "eglSwapBuffers failed")
+        }
+    }
+
+    private fun clearOutput(outputId: Int, target: OutputTarget) {
+        if (!target.surface.isValid) {
+            removeOutput(outputId, failureReason = "Surface became invalid while clearing")
+            return
+        }
+        if (!EGL14.eglMakeCurrent(eglDisplay, target.eglSurface, target.eglSurface, eglContext)) {
+            removeOutput(outputId, failureReason = "eglMakeCurrent failed while clearing")
+            return
+        }
+        GLES20.glViewport(0, 0, target.width, target.height)
+        GLES20.glClearColor(0f, 0f, 0f, 1f)
+        GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
+        if (!EGL14.eglSwapBuffers(eglDisplay, target.eglSurface)) {
+            removeOutput(outputId, failureReason = "eglSwapBuffers failed while clearing")
         }
     }
 
     private fun addOutput(
         outputId: Int,
+        surfaceGeneration: Long?,
         surface: Surface,
         width: Int,
         height: Int,
@@ -255,19 +302,35 @@ internal class FrameFanoutRenderEngine(
             return false
         }
         outputs[outputId] = OutputTarget(
+            surfaceGeneration = surfaceGeneration,
             surface = surface,
             eglSurface = eglSurface,
             width = width.coerceAtLeast(1),
             height = height.coerceAtLeast(1),
             releaseSurfaceOnRemoval = releaseSurfaceOnRemoval
         )
-        renderFrame()
+        outputs[outputId]?.let { target ->
+            if (framesVisible) renderFrame() else clearOutput(outputId, target)
+        }
         Log.i(TAG, "Added output $outputId ${width}x$height; count=${outputs.size}")
         return true
     }
 
-    private fun removeOutput(outputId: Int, failureReason: String? = null) {
-        val output = outputs.remove(outputId) ?: return
+    private fun removeOutput(
+        outputId: Int,
+        surfaceGeneration: Long? = null,
+        failureReason: String? = null
+    ) {
+        val output = outputs[outputId] ?: return
+        if (surfaceGeneration != null && output.surfaceGeneration != surfaceGeneration) {
+            Log.d(
+                TAG,
+                "Ignoring stale remove for $outputId generation=$surfaceGeneration; " +
+                    "active=${output.surfaceGeneration}"
+            )
+            return
+        }
+        outputs.remove(outputId)
         EGL14.eglMakeCurrent(eglDisplay, setupSurface, setupSurface, eglContext)
         EGL14.eglDestroySurface(eglDisplay, output.eglSurface)
         if (output.releaseSurfaceOnRemoval) output.surface.release()
@@ -359,6 +422,7 @@ internal class FrameFanoutRenderEngine(
     private fun eglError(): String = "0x${EGL14.eglGetError().toString(16)}"
 
     private data class OutputTarget(
+        val surfaceGeneration: Long?,
         val surface: Surface,
         val eglSurface: EGLSurface,
         val width: Int,

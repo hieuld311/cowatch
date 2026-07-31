@@ -104,8 +104,10 @@ class FrontPlayerActivity : ComponentActivity() {
     }
 
     private fun show(source: VideoSource.Asset) {
-        if (playbackController.currentSource?.assetPath != source.assetPath) {
+        val sourceChanged = playbackController.currentSource?.assetPath != source.assetPath
+        if (sourceChanged) {
             viewModel.shareCoordinator.stopSharingAll("PID selected different media")
+            renderFanout.beginSourceTransition()
         }
         activeAssetPath.value = source.assetPath
         audioFallbackApplied = false

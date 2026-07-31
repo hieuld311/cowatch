@@ -85,10 +85,14 @@ class PidRenderFanout @Inject constructor(
     fun removeRearOutput(role: String) = engine.removeOutputAsync(outputId(role))
 
     /**
-     * The OES texture survives a media-item switch. Keep outputs black until ExoPlayer reports
-     * the new item's first frame, so the previous video's final frame cannot flash.
+     * Re-establishes the process-owned decoder input before playback starts. A logical stop may
+     * happen while the fullscreen output SurfaceView remains alive behind the library, so output
+     * lifecycle callbacks alone cannot be responsible for attaching the player.
      */
-    fun beginSourceTransition() = engine.waitForFirstFrameAsync()
+    fun prepareForPlayback(sourceChanged: Boolean) {
+        ensureAttached()
+        if (sourceChanged) engine.waitForFirstFrameAsync()
+    }
 
     fun setRearOutputLostListener(listener: (role: String, reason: String) -> Unit) {
         rearOutputLostListener = listener

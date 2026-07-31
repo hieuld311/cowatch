@@ -1,13 +1,16 @@
 package com.ivi.common.data
 
 import android.content.Context
-import android.os.Build
+import android.content.ContentUris
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
 import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
+import android.provider.MediaStore
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.domain.VideoCatalogRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -32,23 +35,29 @@ class AssetVideoRepository @Inject constructor(
         }
 
         refreshCatalog()
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            awaitClose()
-            return@callbackFlow
-        }
-
         val storageManager = context.getSystemService(StorageManager::class.java)
         val callback = object : StorageManager.StorageVolumeCallback() {
             override fun onStateChanged(volume: StorageVolume) {
-                if (volume.isRemovable && !volume.isPrimary) refreshCatalog()
+                refreshCatalog()
             }
         }
+        val mediaObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) = refreshCatalog()
+        }
         storageManager.registerStorageVolumeCallback(context.mainExecutor, callback)
-        awaitClose { storageManager.unregisterStorageVolumeCallback(callback) }
+        context.contentResolver.registerContentObserver(
+            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL),
+            true,
+            mediaObserver
+        )
+        awaitClose {
+            storageManager.unregisterStorageVolumeCallback(callback)
+            context.contentResolver.unregisterContentObserver(mediaObserver)
+        }
     }
 
     private fun loadCatalog(): List<AssetVideo> {
-        return (scanAssetVideos() + scanUsbVideos())
+        return (scanAssetVideos() + scanExternalVideos())
             .distinctBy { it.assetPath }
             .sortedBy { it.title.lowercase() }
     }
@@ -60,32 +69,45 @@ class AssetVideoRepository @Inject constructor(
             .mapNotNull { assetPath -> assetPath.toAssetVideo(isPackagedAsset = true) }
     }
 
-    /** USB is read in place; no file is copied into app storage or the APK. */
-    private fun scanUsbVideos(): List<AssetVideo> {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return emptyList()
-        val storageManager = context.getSystemService(StorageManager::class.java)
-        return storageManager.storageVolumes
+    /** Reads indexed videos from primary storage and every mounted USB/SD media volume. */
+    private fun scanExternalVideos(): List<AssetVideo> {
+        return MediaStore.getExternalVolumeNames(context)
             .asSequence()
-            .filter { it.isRemovable && !it.isPrimary }
-            .mapNotNull { it.directory }
-            .flatMap { root ->
-                runCatching {
-                    root.walkTopDown()
-                        .filter { file -> file.isFile && file.canRead() && MediaFileTypes.isSupportedVideoFileName(file.name) }
-                        .map { file -> file.toUsbVideo() }
-                        .asSequence()
-                }.getOrElse { emptySequence() }
-            }
+            .flatMap { volumeName -> queryVolumeVideos(volumeName).asSequence() }
             .toList()
     }
 
-    private fun File.toUsbVideo(): AssetVideo {
-        return AssetVideo(
-            assetPath = toURI().toString(),
-            fileName = name,
-            title = name.substringBeforeLast('.').toVideoTitle(),
-            isPackagedAsset = false
-        )
+    private fun queryVolumeVideos(volumeName: String): List<AssetVideo> {
+        val collection = MediaStore.Video.Media.getContentUri(volumeName)
+        return runCatching {
+            context.contentResolver.query(
+                collection,
+                VIDEO_PROJECTION,
+                null,
+                null,
+                "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+            )?.use { cursor ->
+                val idIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                buildList {
+                    while (cursor.moveToNext()) {
+                        val fileName = cursor.getString(nameIndex) ?: continue
+                        if (!MediaFileTypes.isSupportedVideoFileName(fileName)) continue
+                        add(
+                            AssetVideo(
+                                assetPath = ContentUris.withAppendedId(
+                                    collection,
+                                    cursor.getLong(idIndex)
+                                ).toString(),
+                                fileName = fileName,
+                                title = fileName.substringBeforeLast('.').toVideoTitle(),
+                                isPackagedAsset = false
+                            )
+                        )
+                    }
+                }
+            }.orEmpty()
+        }.getOrDefault(emptyList())
     }
 
     // Recursively scan only the video catalog folder so unrelated assets never appear in the library.
@@ -123,5 +145,9 @@ class AssetVideoRepository @Inject constructor(
 
     private companion object {
         const val VIDEO_ASSET_ROOT = "fileVideoSample"
+        val VIDEO_PROJECTION = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME
+        )
     }
 }

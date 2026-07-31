@@ -48,6 +48,7 @@ internal class FrameFanoutRenderEngine(
     private var sourceHeight = 0
     private var sourcePixelRatio = 1f
     private var framesVisible = true
+    private var showOnNextInputFrame = false
 
     init {
         Matrix.setIdentityM(textureMatrix, 0)
@@ -96,6 +97,7 @@ internal class FrameFanoutRenderEngine(
         if (released.get()) return
         renderHandler.post {
             framesVisible = false
+            showOnNextInputFrame = false
             outputs.entries.toList().forEach { (outputId, target) -> clearOutput(outputId, target) }
             Log.d(TAG, "Holding outputs for the next media item's first frame")
         }
@@ -104,9 +106,13 @@ internal class FrameFanoutRenderEngine(
     override fun allowFramesAsync() {
         if (released.get()) return
         renderHandler.post {
-            framesVisible = true
-            renderFrame()
-            Log.d(TAG, "Showing frames after player first-frame callback")
+            if (!framesVisible) {
+                // The player callback confirms that the new stream reached the input Surface, but
+                // the OES texture is not guaranteed to have latched that buffer yet. Waiting for
+                // the next SurfaceTexture callback prevents sampling the previous stream's frame.
+                showOnNextInputFrame = true
+                Log.d(TAG, "First frame confirmed; waiting for fresh input texture")
+            }
         }
     }
 
@@ -218,6 +224,11 @@ internal class FrameFanoutRenderEngine(
                 if (frameAvailable.getAndSet(false)) {
                     inputSurfaceTexture.updateTexImage()
                     inputSurfaceTexture.getTransformMatrix(textureMatrix)
+                    if (showOnNextInputFrame) {
+                        showOnNextInputFrame = false
+                        framesVisible = true
+                        Log.d(TAG, "Showing fresh input texture")
+                    }
                     if (framesVisible) renderFrame()
                 }
             } finally {

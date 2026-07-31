@@ -243,8 +243,12 @@ class Media3PlaybackController @Inject constructor(
     private fun stopPlaybackInternal(notifyEnded: Boolean) {
         activePlayerView?.player = null
         activePlayerView = null
-        sessionPlayer?.clearVideoSurface()
-        externalVideoSurface = null
+        // The PID fanout input Surface is process-owned and remains valid across logical stops.
+        // Keeping it attached lets a reused FrontPlayerActivity start a new decoder without
+        // waiting for one of its output SurfaceViews to be recreated.
+        if (externalVideoSurface == null) {
+            sessionPlayer?.clearVideoSurface()
+        }
         sessionPlayer?.stop()
         sessionPlayer?.clearMediaItems()
         currentSource = null
@@ -255,6 +259,8 @@ class Media3PlaybackController @Inject constructor(
 
     fun releaseProcessResources() {
         stopPlaybackInternal(notifyEnded = false)
+        sessionPlayer?.clearVideoSurface()
+        externalVideoSurface = null
         mediaSession?.release()
         mediaSession = null
         sessionPlayer?.release()

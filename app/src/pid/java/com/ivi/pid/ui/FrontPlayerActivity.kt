@@ -107,8 +107,8 @@ class FrontPlayerActivity : ComponentActivity() {
         val sourceChanged = playbackController.currentSource?.assetPath != source.assetPath
         if (sourceChanged) {
             viewModel.shareCoordinator.stopSharingAll("PID selected different media")
-            renderFanout.beginSourceTransition()
         }
+        renderFanout.prepareForPlayback(sourceChanged)
         activeAssetPath.value = source.assetPath
         audioFallbackApplied = false
         playbackController.showFullscreen(source)

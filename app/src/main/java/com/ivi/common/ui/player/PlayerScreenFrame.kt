@@ -5,13 +5,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.ivi.R
 import com.ivi.common.ui.PressStateIconButton
+import com.ivi.common.ui.coWatchColorScheme
 
 /** Shared player layering; flavors supply only their surface, controls and optional overlays. */
 @Composable
@@ -25,7 +26,7 @@ public fun PlayerScreenFrame(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(MaterialTheme.coWatchColorScheme.playerCanvas)
     ) {
         videoSurface()
         playbackControls()

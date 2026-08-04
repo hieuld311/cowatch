@@ -20,17 +20,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.ivi.R
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.domain.InAppPipState
 import com.ivi.common.media.ThumbnailLoader
 import com.ivi.common.playback.PlayerSurfaceController
+import com.ivi.common.ui.coWatchColorScheme
 import com.ivi.common.ui.library.ExplorerBackground
-import com.ivi.common.ui.library.ExplorerSurfaceColor
-import com.ivi.common.ui.library.ExplorerTitleColor
 import com.ivi.common.ui.library.LibraryPipPlayer
 import com.ivi.common.ui.player.Media3PlayerSurface
 
@@ -53,18 +51,18 @@ fun VideoLibraryScreen(
     var previewFocusedIndex by remember(videos) { mutableStateOf<Int?>(null) }
     val displayFocusedIndex = previewFocusedIndex ?: focusedIndex
     val focusedVideo = videos.getOrNull(displayFocusedIndex)
-    val backgroundVideo = videos.getOrNull(focusedIndex)
     val density = LocalDensity.current
     val railHorizontalPadding = with(density) { VIDEO_RAIL_HORIZONTAL_PADDING_PX.toDp() }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(ExplorerSurfaceColor)
+            .background(MaterialTheme.coWatchColorScheme.librarySurface)
     ) {
         ExplorerBackground(
-            video = backgroundVideo,
+            video = focusedVideo,
             thumbnailLoader = thumbnailLoader,
+            backgroundDrawable = R.drawable.img_passenger_launcher_background,
             modifier = Modifier.fillMaxSize()
         )
         Column(modifier = Modifier.fillMaxSize()) {
@@ -78,10 +76,8 @@ fun VideoLibraryScreen(
                         end = railHorizontalPadding,
                         bottom = 12.dp
                     ),
-                    color = ExplorerTitleColor,
+                    color = MaterialTheme.coWatchColorScheme.libraryTitle,
                     style = MaterialTheme.typography.headlineSmall,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )

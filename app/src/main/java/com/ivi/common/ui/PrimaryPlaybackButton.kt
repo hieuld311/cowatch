@@ -27,30 +27,41 @@ public fun PrimaryPlaybackButton(
     forcePressedVisual: Boolean = false
 ) {
     val press = rememberPressAnimationState("PrimaryPlaybackButtonScale")
-    val showPressed = forcePressedVisual || press.isPressed
+    val showPressed = enabled && (forcePressedVisual || press.isPressed)
+    val normalIconDrawable = if (isPlaying) {
+        R.drawable.ico_media_pause_n
+    } else {
+        R.drawable.ico_media_play_l_n
+    }
+    val iconDrawable = when {
+        !enabled -> disabledDrawableOrNull(normalIconDrawable) ?: normalIconDrawable
+        isPlaying && showPressed -> R.drawable.ico_media_pause_p
+        isPlaying -> R.drawable.ico_media_pause_n
+        showPressed -> R.drawable.ico_media_play_l_p
+        else -> R.drawable.ico_media_play_l_n
+    }
+    val backgroundDrawable = when {
+        !enabled -> R.drawable.img_button_play_background_d
+        showPressed -> R.drawable.img_button_play_background_p
+        else -> R.drawable.img_button_play_background_n
+    }
 
     Box(
         modifier = modifier
             .size(buttonSize)
             .graphicsLayer {
-                scaleX = if (forcePressedVisual) 0.98f else press.scale
-                scaleY = if (forcePressedVisual) 0.98f else press.scale
+                scaleX = if (showPressed) 0.98f else press.scale
+                scaleY = if (showPressed) 0.98f else press.scale
             },
         contentAlignment = Alignment.Center
     ) {
         Crossfade(
-            targetState = showPressed,
+            targetState = backgroundDrawable,
             animationSpec = tween(90),
             label = "PrimaryPlaybackBackground"
-        ) { pressed ->
+        ) { drawableRes ->
             Image(
-                painter = painterResource(
-                    if (pressed) {
-                        R.drawable.img_button_play_background_p
-                    } else {
-                        R.drawable.img_button_play_background_n
-                    }
-                ),
+                painter = painterResource(drawableRes),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize()
             )
@@ -68,32 +79,16 @@ public fun PrimaryPlaybackButton(
             contentAlignment = Alignment.Center
         ) {
             Crossfade(
-                targetState = PlaybackButtonVisual(
-                    isPlaying = isPlaying,
-                    isPressed = showPressed
-                ),
+                targetState = iconDrawable,
                 animationSpec = tween(90),
                 label = "PrimaryPlaybackGlyph"
-            ) { visual ->
+            ) { drawableRes ->
                 Image(
-                    painter = painterResource(visual.iconResId),
-                    contentDescription = if (visual.isPlaying) "Pause video" else "Play video",
+                    painter = painterResource(drawableRes),
+                    contentDescription = if (isPlaying) "Pause video" else "Play video",
                     modifier = Modifier.fillMaxSize()
                 )
             }
         }
     }
-}
-
-private data class PlaybackButtonVisual(
-    val isPlaying: Boolean,
-    val isPressed: Boolean
-) {
-    val iconResId: Int
-        get() = when {
-            isPlaying && isPressed -> R.drawable.ico_media_pause_p
-            isPlaying -> R.drawable.ico_media_pause_n
-            isPressed -> R.drawable.ico_media_play_l_p
-            else -> R.drawable.ico_media_play_l_n
-        }
 }

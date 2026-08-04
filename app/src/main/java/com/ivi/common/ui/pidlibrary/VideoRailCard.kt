@@ -18,18 +18,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.media.ThumbnailLoader
 import com.ivi.common.ui.PrimaryPlaybackButton
-import com.ivi.common.ui.library.ExplorerPlaceholderColor
-import com.ivi.common.ui.library.VideoFocusCyan
+import com.ivi.common.ui.coWatchColorScheme
 import com.ivi.common.ui.library.VideoThumbnail
 
 @Composable
@@ -44,6 +40,7 @@ public fun VideoRailCard(
     onClick: () -> Unit,
     onPlaybackClick: () -> Unit
 ) {
+    val focusedOutlineColor = MaterialTheme.coWatchColorScheme.focusedVideoOutline
     Column(
         modifier = modifier
             .width(width)
@@ -55,12 +52,12 @@ public fun VideoRailCard(
             .height(thumbnailHeight)
             .clip(VideoCardShape)
             // Placeholder color and fixed thumbnail height prevent layout jumps while assets decode.
-            .background(ExplorerPlaceholderColor)
+            .background(MaterialTheme.coWatchColorScheme.libraryPlaceholder)
             .then(
                 if (selected) {
                     Modifier.border(
                         width = 1.dp,
-                        color = VideoFocusCyan,
+                        color = focusedOutlineColor,
                         shape = VideoCardShape
                     )
                 } else {
@@ -92,10 +89,8 @@ public fun VideoRailCard(
             Text(
                 text = video.title,
                 modifier = Modifier.padding(top = 8.dp),
-                color = Color.White,
+                color = MaterialTheme.coWatchColorScheme.contentPrimary,
                 style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

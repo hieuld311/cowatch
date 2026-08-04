@@ -4,7 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,14 +24,17 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import com.ivi.R
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.media.ThumbnailLoader
 import com.ivi.common.ui.library.circularIndex
@@ -180,15 +183,27 @@ public fun VideoRailProgress(
             .fillMaxWidth()
             .height(RAIL_PROGRESS_HEIGHT)
     ) {
-        Box(
+        Image(
+            painter = painterResource(R.drawable.img_general_progress_bar_track),
+            contentDescription = null,
             modifier = Modifier
-                .fillMaxWidth(progress.coerceIn(0f, 1f))
+                .fillMaxWidth()
+                .fillMaxHeight(),
+            contentScale = ContentScale.FillBounds
+        )
+        Image(
+            painter = painterResource(R.drawable.img_general_progress_bar_filled_track),
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxWidth()
                 .fillMaxHeight()
-                .background(
-                    Brush.horizontalGradient(
-                        colors = listOf(RAIL_PROGRESS_START_COLOR, RAIL_PROGRESS_END_COLOR)
-                    )
-                )
+                .drawWithContent {
+                    // Reveal the full-width filled artwork instead of rescaling it as focus changes.
+                    clipRect(right = size.width * progress) {
+                        this@drawWithContent.drawContent()
+                    }
+                },
+            contentScale = ContentScale.FillBounds
         )
     }
 }
@@ -293,5 +308,3 @@ private const val FOCUS_SETTLE_THRESHOLD = 0.32f
 private const val FOCUS_SETTLE_ANIMATION_DURATION_MS = 320
 private const val RAIL_PROGRESS_ANIMATION_DURATION_MS = 420
 private val RAIL_PROGRESS_HEIGHT = 6.dp
-private val RAIL_PROGRESS_START_COLOR = Color(0xFF00E7FF)
-private val RAIL_PROGRESS_END_COLOR = Color(0xFF8D3DFF)

@@ -1,6 +1,5 @@
 package com.ivi.common.ui.player
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -13,14 +12,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -33,6 +33,7 @@ public val SEEK_BAR_VISUAL_HEIGHT = 40.dp
 
 private val SEEK_HANDLE_SIZE = 40.dp
 private val SEEK_TOUCH_HEIGHT = 16.dp
+private val SEEK_TRACK_HEIGHT = 6.dp
 
 @Composable
 public fun VideoSeekBar(
@@ -44,6 +45,8 @@ public fun VideoSeekBar(
     modifier: Modifier = Modifier
 ) {
     var widthPx by remember { mutableIntStateOf(1) }
+    var isPressing by remember { mutableStateOf(false) }
+    var isDragging by remember { mutableStateOf(false) }
     val density = LocalDensity.current
     val handleSizePx = with(density) { SEEK_HANDLE_SIZE.toPx() }
     val handleRadiusPx = handleSizePx / 2f
@@ -67,29 +70,41 @@ public fun VideoSeekBar(
             .height(SEEK_BAR_VISUAL_HEIGHT)
             .onSizeChanged { widthPx = it.width.coerceAtLeast(1) }
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val trackY = size.height / 2f
-
-            drawLine(
-                color = Color(0xFF2B2D4A),
-                start = Offset(0f, trackY),
-                end = Offset(size.width, trackY),
-                strokeWidth = 3.dp.toPx()
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .height(SEEK_TRACK_HEIGHT)
+        ) {
+            Image(
+                painter = painterResource(R.drawable.img_general_progress_bar_track),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.FillBounds
             )
-            drawLine(
-                brush = Brush.horizontalGradient(
-                    colors = listOf(Color(0xFF00E7FF), Color(0xFF8D3DFF)),
-                    startX = 0f,
-                    endX = size.width
-                ),
-                start = Offset(0f, trackY),
-                end = Offset(progressXPx, trackY),
-                strokeWidth = 3.dp.toPx()
+            Image(
+                painter = painterResource(R.drawable.img_general_progress_bar_filled_track),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawWithContent {
+                        // Keep the filled artwork at full track width, then reveal it up to progress.
+                        clipRect(right = size.width * progress) {
+                            this@drawWithContent.drawContent()
+                        }
+                    },
+                contentScale = ContentScale.FillBounds
             )
         }
 
         Image(
-            painter = painterResource(R.drawable.img_general_slider_handle_n),
+            painter = painterResource(
+                if (isPressing || isDragging) {
+                    R.drawable.img_general_slider_handle_p
+                } else {
+                    R.drawable.img_general_slider_handle_n
+                }
+            ),
             contentDescription = null,
             modifier = Modifier
                 .size(SEEK_HANDLE_SIZE)
@@ -109,24 +124,38 @@ public fun VideoSeekBar(
                 .pointerInput(enabled, durationMs, widthPx) {
                     if (!enabled) return@pointerInput
 
-                    detectTapGestures { offset ->
-                        onSeekPreview(positionFromX(offset.x))
-                        onSeekFinished()
-                    }
+                    detectTapGestures(
+                        onPress = {
+                            isPressing = true
+                            tryAwaitRelease()
+                            isPressing = false
+                        },
+                        onTap = { offset ->
+                            onSeekPreview(positionFromX(offset.x))
+                            onSeekFinished()
+                        }
+                    )
                 }
                 .pointerInput(enabled, durationMs, widthPx) {
                     if (!enabled) return@pointerInput
 
                     detectDragGestures(
                         onDragStart = { offset ->
+                            isDragging = true
                             onSeekPreview(positionFromX(offset.x))
                         },
                         onDrag = { change, _ ->
                             change.consume()
                             onSeekPreview(positionFromX(change.position.x))
                         },
-                        onDragEnd = onSeekFinished,
-                        onDragCancel = onSeekFinished
+                        onDragEnd = {
+                            isDragging = false
+                            onSeekFinished()
+                        },
+                        onDragCancel = {
+                            isDragging = false
+                            onSeekFinished()
+                        }
                     )
                 }
         )

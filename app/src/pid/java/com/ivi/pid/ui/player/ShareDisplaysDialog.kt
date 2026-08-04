@@ -32,7 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -41,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.ivi.R
+import com.ivi.common.ui.coWatchColorScheme
 import com.ivi.pid.sharing.RearTargetState
 
 @Composable
@@ -51,6 +51,7 @@ internal fun ShareDisplaysDialog(
 ) {
     var selectedRoles by remember(displays) { mutableStateOf(emptySet<String>()) }
     val density = LocalDensity.current
+    val colors = MaterialTheme.coWatchColorScheme
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -60,7 +61,7 @@ internal fun ShareDisplaysDialog(
             modifier = Modifier
                 .width(with(density) { DIALOG_WIDTH_PX.toDp() })
                 .height(with(density) { DIALOG_HEIGHT_PX.toDp() })
-                .background(DialogBackgroundColor)
+                .background(colors.dialogSurface)
         ) {
             Box(
                 modifier = Modifier
@@ -70,14 +71,14 @@ internal fun ShareDisplaysDialog(
             ) {
                 Text(
                     text = "Accept video broadcast request?",
-                    color = Color.White,
+                    color = colors.contentPrimary,
                     style = MaterialTheme.typography.headlineSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            HorizontalDivider(color = DialogDividerColor)
+            HorizontalDivider(color = colors.dialogDivider)
 
             if (displays.isEmpty()) {
                 Box(
@@ -88,7 +89,7 @@ internal fun ShareDisplaysDialog(
                 ) {
                     Text(
                         text = "No secondary display found",
-                        color = DisabledTextColor,
+                        color = colors.dialogDisabledText,
                         style = MaterialTheme.typography.bodyLarge
                     )
                 }
@@ -119,7 +120,7 @@ internal fun ShareDisplaysDialog(
                                 }
                             }
                         )
-                        HorizontalDivider(color = DialogDividerColor)
+                        HorizontalDivider(color = colors.dialogDivider)
                     }
                 }
             }
@@ -141,6 +142,7 @@ private fun DisplayOptionRow(
     onToggle: () -> Unit
 ) {
     val density = LocalDensity.current
+    val colors = MaterialTheme.coWatchColorScheme
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val selectedBackground = painterResource(R.drawable.btn_general_list_vertical_s)
@@ -194,9 +196,9 @@ private fun DisplayOptionRow(
                     .weight(1f)
                     .padding(start = with(density) { DISPLAY_TEXT_START_PADDING_PX.toDp() }),
                 color = when {
-                    !enabled -> DisabledTextColor
-                    checked -> SelectedTextColor
-                    else -> NormalTextColor
+                    !enabled -> colors.dialogDisabledText
+                    checked -> colors.dialogAccent
+                    else -> colors.dialogNormalText
                 },
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 1,
@@ -228,12 +230,14 @@ private fun DialogActions(
         DialogButton(
             text = "Cancel",
             enabled = true,
+            isBroadcastAction = false,
             onClick = onDismiss,
             modifier = Modifier.weight(1f)
         )
         DialogButton(
             text = "Broadcast",
             enabled = broadcastEnabled,
+            isBroadcastAction = true,
             onClick = onBroadcast,
             modifier = Modifier.weight(1f)
         )
@@ -244,20 +248,27 @@ private fun DialogActions(
 private fun DialogButton(
     text: String,
     enabled: Boolean,
+    isBroadcastAction: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
+    val colors = MaterialTheme.coWatchColorScheme
+    val containerColor = if (isBroadcastAction) {
+        colors.broadcastAction
+    } else {
+        colors.dialogAction
+    }
     Button(
         onClick = onClick,
         enabled = enabled,
         modifier = modifier.height(with(density) { DIALOG_ACTION_HEIGHT_PX.toDp() }),
         shape = RoundedCornerShape(4.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = ActionButtonColor,
-            contentColor = Color.White,
-            disabledContainerColor = DisabledActionButtonColor,
-            disabledContentColor = DisabledTextColor
+            containerColor = containerColor,
+            contentColor = colors.dialogActionContent,
+            disabledContainerColor = colors.dialogDisabledAction,
+            disabledContentColor = colors.dialogDisabledText
         ),
         contentPadding = PaddingValues(0.dp)
     ) {
@@ -299,11 +310,3 @@ private const val DIALOG_ACTION_HORIZONTAL_PADDING_PX = 50f
 private const val DIALOG_ACTION_BOTTOM_PADDING_PX = 24f
 private const val DIALOG_ACTION_GAP_PX = 20f
 private const val DIALOG_ACTION_HEIGHT_PX = 84f
-
-private val DialogBackgroundColor = Color(0xFF25263B)
-private val DialogDividerColor = Color.White.copy(alpha = 0.08f)
-private val SelectedTextColor = Color(0xFF00F9EC)
-private val NormalTextColor = Color(0xFFC7CADA)
-private val DisabledTextColor = Color(0xFF838497)
-private val ActionButtonColor = Color(0xFF62636F)
-private val DisabledActionButtonColor = Color(0xFF4A4B56)

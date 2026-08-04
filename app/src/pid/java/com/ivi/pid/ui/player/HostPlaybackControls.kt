@@ -12,6 +12,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
+import com.ivi.R
 import com.ivi.common.media.SeekFrameProvider
 import com.ivi.common.ui.rememberPressAnimationState
 import com.ivi.common.ui.player.PlaybackControlBar
@@ -33,6 +34,7 @@ internal fun HostPlaybackControls(
         onPictureInPictureClick = onPictureInPictureClick,
         modifier = modifier,
         showVideoTitle = true,
+        controlBackgroundDrawable = R.drawable.img_media_passenger_control_background,
         leadingControl = { onInteraction ->
 
                         val press = rememberPressAnimationState("BroadcastIconScale")

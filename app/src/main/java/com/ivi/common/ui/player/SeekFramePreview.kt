@@ -25,11 +25,11 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import com.ivi.common.media.SeekFrameProvider
+import com.ivi.common.ui.coWatchColorScheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.collectLatest
@@ -98,8 +98,8 @@ public fun SeekFramePreview(
                 .width(bubbleWidth)
                 .height(bubbleHeight)
                 .clip(PreviewShape)
-                .background(Color.Black)
-                .border(1.dp, Color.White.copy(alpha = 0.7f), PreviewShape)
+                .background(MaterialTheme.coWatchColorScheme.playerCanvas)
+                .border(1.dp, MaterialTheme.coWatchColorScheme.seekPreviewOutline, PreviewShape)
         ) {
             if (imageBitmap != null) {
                 Image(
@@ -111,11 +111,11 @@ public fun SeekFramePreview(
             }
             Text(
                 text = formatDurationClock(positionMs),
-                color = Color.White,
+                color = MaterialTheme.coWatchColorScheme.contentPrimary,
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier
                     .align(if (imageBitmap == null) Alignment.Center else Alignment.BottomCenter)
-                    .background(Color.Black.copy(alpha = 0.68f), RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.coWatchColorScheme.playerScrim, RoundedCornerShape(4.dp))
                     .padding(horizontal = 8.dp, vertical = 3.dp)
             )
         }

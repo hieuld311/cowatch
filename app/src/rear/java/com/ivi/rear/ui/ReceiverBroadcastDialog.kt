@@ -27,13 +27,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.ivi.rear.sharing.PendingShareRequest
+import com.ivi.common.ui.coWatchColorScheme
 import kotlinx.coroutines.delay
 import kotlin.math.ceil
 
@@ -45,6 +45,7 @@ internal fun ReceiverBroadcastDialog(
     onAccept: () -> Unit
 ) {
     val density = LocalDensity.current
+    val colors = MaterialTheme.coWatchColorScheme
     var remainingSeconds by remember(request.snapshot.sessionId) {
         mutableIntStateOf(request.remainingSeconds())
     }
@@ -75,7 +76,7 @@ internal fun ReceiverBroadcastDialog(
             modifier = Modifier
                 .width(with(density) { DIALOG_WIDTH_PX.toDp() })
                 .height(with(density) { DIALOG_HEIGHT_PX.toDp() })
-                .background(DialogBackgroundColor)
+                .background(colors.dialogSurface)
         ) {
             Box(
                 modifier = Modifier
@@ -85,14 +86,14 @@ internal fun ReceiverBroadcastDialog(
             ) {
                 Text(
                     text = "Accept video broadcast request?",
-                    color = Color.White,
+                    color = colors.contentPrimary,
                     style = MaterialTheme.typography.headlineSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
 
-            HorizontalDivider(color = DialogDividerColor)
+            HorizontalDivider(color = colors.dialogDivider)
 
             Column(
                 modifier = Modifier
@@ -103,7 +104,7 @@ internal fun ReceiverBroadcastDialog(
             ) {
                 Text(
                     text = request.snapshot.title,
-                    color = VideoTitleColor,
+                    color = colors.dialogAccent,
                     style = MaterialTheme.typography.headlineSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -112,13 +113,13 @@ internal fun ReceiverBroadcastDialog(
                 Spacer(modifier = Modifier.height(with(density) { TITLE_COUNTDOWN_GAP_PX.toDp() }))
                 Text(
                     text = "Accepting the video broadcast in $remainingSeconds seconds",
-                    color = NormalTextColor,
+                    color = colors.dialogNormalText,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1
                 )
             }
 
-            HorizontalDivider(color = DialogDividerColor)
+            HorizontalDivider(color = colors.dialogDivider)
 
             Row(
                 modifier = Modifier
@@ -152,13 +153,14 @@ private fun ReceiverDialogButton(
     modifier: Modifier = Modifier
 ) {
     val density = LocalDensity.current
+    val colors = MaterialTheme.coWatchColorScheme
     Button(
         onClick = onClick,
         modifier = modifier.height(with(density) { ACTION_HEIGHT_PX.toDp() }),
         shape = RoundedCornerShape(4.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = ActionButtonColor,
-            contentColor = Color.White
+            containerColor = colors.dialogAction,
+            contentColor = colors.dialogActionContent
         ),
         contentPadding = PaddingValues(0.dp)
     ) {
@@ -182,9 +184,3 @@ private const val TITLE_COUNTDOWN_GAP_PX = 22f
 private const val ACTION_HORIZONTAL_PADDING_PX = 50f
 private const val ACTION_GAP_PX = 20f
 private const val ACTION_HEIGHT_PX = 84f
-
-private val DialogBackgroundColor = Color(0xFF25263B)
-private val DialogDividerColor = Color.White.copy(alpha = 0.08f)
-private val VideoTitleColor = Color(0xFF00F9EC)
-private val NormalTextColor = Color(0xFFC7CADA)
-private val ActionButtonColor = Color(0xFF62636F)

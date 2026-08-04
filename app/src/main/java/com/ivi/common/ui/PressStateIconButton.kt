@@ -17,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -34,7 +35,12 @@ public fun PressStateIconButton(
     forcePressedVisual: Boolean = false
 ) {
     val press = rememberPressAnimationState("PressStateIconScale")
-    val showPressed = forcePressedVisual || press.isPressed
+    val showPressed = enabled && (forcePressedVisual || press.isPressed)
+    val drawable = when {
+        !enabled -> disabledDrawableOrNull(normalDrawable) ?: normalDrawable
+        showPressed -> pressedDrawable
+        else -> normalDrawable
+    }
 
     Box(
         modifier = modifier
@@ -45,8 +51,8 @@ public fun PressStateIconButton(
             modifier = Modifier
                 .size(iconSize)
                 .graphicsLayer {
-                    scaleX = if (forcePressedVisual) 0.98f else press.scale
-                    scaleY = if (forcePressedVisual) 0.98f else press.scale
+                    scaleX = if (showPressed) 0.98f else press.scale
+                    scaleY = if (showPressed) 0.98f else press.scale
                 }
                 .clickable(
                     interactionSource = press.interactionSource,
@@ -57,17 +63,32 @@ public fun PressStateIconButton(
             contentAlignment = Alignment.Center
         ) {
             Crossfade(
-                targetState = showPressed,
+                targetState = drawable,
                 animationSpec = tween(90),
                 label = "PressStateIconCrossfade"
-            ) { pressed ->
+            ) { drawableRes ->
                 Image(
-                    painter = painterResource(if (pressed) pressedDrawable else normalDrawable),
+                    painter = painterResource(drawableRes),
                     contentDescription = contentDescription,
                     modifier = Modifier.fillMaxSize()
                 )
             }
         }
+    }
+}
+
+/** Finds a sibling resource ending in `_d`; normal artwork remains the fallback while an asset is absent. */
+@Composable
+public fun disabledDrawableOrNull(@DrawableRes normalDrawable: Int): Int? {
+    val context = LocalContext.current
+    return remember(normalDrawable) {
+        val normalName = runCatching {
+            context.resources.getResourceEntryName(normalDrawable)
+        }.getOrNull() ?: return@remember null
+        val disabledName = normalName.replace(Regex("_[nps]$"), "_d")
+        context.resources
+            .getIdentifier(disabledName, "drawable", context.packageName)
+            .takeIf { it != 0 }
     }
 }
 

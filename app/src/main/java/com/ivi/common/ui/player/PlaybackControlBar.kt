@@ -3,6 +3,7 @@ package com.ivi.common.ui.player
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -23,11 +24,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.paint
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -37,6 +35,7 @@ import com.ivi.R
 import com.ivi.common.media.SeekFrameProvider
 import com.ivi.common.ui.PressStateIconButton
 import com.ivi.common.ui.PrimaryPlaybackButton
+import com.ivi.common.ui.coWatchColorScheme
 import kotlinx.coroutines.delay
 
 public const val PLAYBACK_CONTROL_BAR_HEIGHT_DP = 154
@@ -59,6 +58,7 @@ public fun PlaybackControlBar(
     modifier: Modifier = Modifier,
     showVideoTitle: Boolean = false,
     controlsEnabled: Boolean = true,
+    @DrawableRes controlBackgroundDrawable: Int = R.drawable.img_media_control_background,
     leadingControl: (@Composable (onInteraction: () -> Unit) -> Unit)? = null,
     trailingControl: (@Composable () -> Unit)? = null
 ) {
@@ -124,10 +124,8 @@ public fun PlaybackControlBar(
                 Text(
                     text = controlsState.videoTitle,
                     modifier = Modifier.padding(80.dp),
-                    color = Color.White,
+                    color = MaterialTheme.coWatchColorScheme.contentPrimary,
                     style = MaterialTheme.typography.headlineSmall,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = FontWeight.Bold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -148,6 +146,7 @@ public fun PlaybackControlBar(
                     .height(CONTROL_BAR_HEIGHT)
             ) {
                 ControlBarBackground(
+                    backgroundDrawable = controlBackgroundDrawable,
                     modifier = Modifier.align(Alignment.BottomCenter)
                 ) {
                     TransportControls(
@@ -194,10 +193,8 @@ public fun ReadOnlyPlaybackControlBar(
             Text(
                 text = title,
                 modifier = Modifier.padding(80.dp),
-                color = Color.White,
+                color = MaterialTheme.coWatchColorScheme.contentPrimary,
                 style = MaterialTheme.typography.headlineSmall,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -242,6 +239,7 @@ public fun ReadOnlyPlaybackControlBar(
 
 @Composable
 private fun ControlBarBackground(
+    @DrawableRes backgroundDrawable: Int = R.drawable.img_media_control_background,
     modifier: Modifier = Modifier,
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit
 ) {
@@ -250,7 +248,7 @@ private fun ControlBarBackground(
             .fillMaxWidth()
             .height(CONTROL_BAR_BACKGROUND_HEIGHT)
             .paint(
-                painter = painterResource(R.drawable.img_media_control_background),
+                painter = painterResource(backgroundDrawable),
                 contentScale = ContentScale.FillBounds
             ),
         content = content
@@ -497,8 +495,7 @@ private fun TransportControlSlot(
 private fun ControlTime(text: String, textAlign: TextAlign = TextAlign.Start) {
     Text(
         text = text,
-        color = Color.White.copy(alpha = 0.7f),
-        fontFamily = FontFamily.Monospace,
+        color = MaterialTheme.coWatchColorScheme.contentPrimary.copy(alpha = 0.7f),
         style = MaterialTheme.typography.labelSmall,
         textAlign = textAlign,
         modifier = Modifier.width(52.dp)

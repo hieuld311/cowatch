@@ -5,6 +5,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -15,6 +16,7 @@ import androidx.compose.ui.layout.ContentScale
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.media.ThumbnailLoader
 import com.ivi.common.media.ThumbnailProfile
+import com.ivi.common.ui.coWatchColorScheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -43,7 +45,7 @@ public fun VideoThumbnail(
 
     val imageBitmap = remember(thumbnail) { thumbnail?.asImageBitmap() }
 
-    Box(modifier = modifier.background(ExplorerPlaceholderColor)) {
+    Box(modifier = modifier.background(MaterialTheme.coWatchColorScheme.libraryPlaceholder)) {
         if (imageBitmap != null) {
             Image(
                 bitmap = imageBitmap,

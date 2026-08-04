@@ -8,17 +8,17 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.Player
 import com.ivi.common.media.SeekFrameProvider
 import com.ivi.common.ui.player.FanoutVideoSurface
 import com.ivi.common.ui.player.PlayerScreenFrame
+import com.ivi.common.ui.coWatchColorScheme
 import com.ivi.pid.rendering.PidRenderFanout
 import com.ivi.pid.rendering.VideoRenderEngine
 import com.ivi.pid.sharing.RearTargetState
@@ -100,10 +100,10 @@ private fun BoxScope.HostBroadcastNotification(
     ) {
         Text(
             text = text.orEmpty(),
-            color = Color(0xFFDCE8F2),
-            fontFamily = FontFamily.Monospace,
+            color = MaterialTheme.coWatchColorScheme.broadcastNotificationText,
+            style = MaterialTheme.typography.labelLarge,
             modifier = Modifier
-                .background(Color(0xFF25364A), RoundedCornerShape(4.dp))
+                .background(MaterialTheme.coWatchColorScheme.broadcastNotificationSurface, RoundedCornerShape(4.dp))
                 .padding(horizontal = 28.dp, vertical = 8.dp)
         )
     }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -37,7 +38,7 @@ import androidx.compose.ui.unit.dp
 import com.ivi.common.media.ThumbnailLoader
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.ui.PrimaryPlaybackButton
-import com.ivi.common.ui.library.VideoFocusCyan
+import com.ivi.common.ui.coWatchColorScheme
 import com.ivi.common.ui.library.VideoThumbnail
 import com.ivi.common.ui.library.circularIndex
 import com.ivi.common.ui.library.handleFocusedVideoPlay
@@ -235,7 +236,13 @@ private fun VerticalRailCard(
             .height(with(density) { heightPx.toDp() })
             .clip(VideoCardShape)
             .clickable(onClick = onClick)
-            .then(if (selected) Modifier.border(1.dp, VideoFocusCyan, VideoCardShape) else Modifier)
+            .then(
+                if (selected) {
+                    Modifier.border(1.dp, MaterialTheme.coWatchColorScheme.focusedVideoOutline, VideoCardShape)
+                } else {
+                    Modifier
+                }
+            )
     ) {
         VideoThumbnail(
             video = video,

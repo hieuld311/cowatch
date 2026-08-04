@@ -2,12 +2,17 @@ package com.ivi.common.data
 
 import android.content.Context
 import android.content.ContentUris
+import android.Manifest
+import android.content.pm.PackageManager
 import android.database.ContentObserver
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.Process
 import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
 import android.provider.MediaStore
+import android.util.Log
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.domain.VideoCatalogRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -38,11 +43,15 @@ class AssetVideoRepository @Inject constructor(
         val storageManager = context.getSystemService(StorageManager::class.java)
         val callback = object : StorageManager.StorageVolumeCallback() {
             override fun onStateChanged(volume: StorageVolume) {
+                Log.i(TAG, "Storage changed; refreshing catalog")
                 refreshCatalog()
             }
         }
         val mediaObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) = refreshCatalog()
+            override fun onChange(selfChange: Boolean) {
+                Log.i(TAG, "MediaStore changed: selfChange=$selfChange; refreshing catalog")
+                refreshCatalog()
+            }
         }
         storageManager.registerStorageVolumeCallback(context.mainExecutor, callback)
         context.contentResolver.registerContentObserver(
@@ -57,9 +66,18 @@ class AssetVideoRepository @Inject constructor(
     }
 
     private fun loadCatalog(): List<AssetVideo> {
-        return (scanAssetVideos() + scanExternalVideos())
+        val packagedVideos = scanAssetVideos()
+        val externalVideos = scanExternalVideos()
+        return (packagedVideos + externalVideos)
             .distinctBy { it.assetPath }
             .sortedBy { it.title.lowercase() }
+            .also { catalog ->
+                Log.i(
+                    TAG,
+                    "Catalog loaded: packaged=${packagedVideos.size}, external=${externalVideos.size}, " +
+                        "total=${catalog.size}"
+                )
+            }
     }
 
     // Exhibition videos live under assets/fileVideoSample; assetPath keeps the folder for Media3 asset:/// playback.
@@ -71,7 +89,22 @@ class AssetVideoRepository @Inject constructor(
 
     /** Reads indexed videos from primary storage and every mounted USB/SD media volume. */
     private fun scanExternalVideos(): List<AssetVideo> {
-        return MediaStore.getExternalVolumeNames(context)
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_VIDEO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        val permissionGranted = context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
+        val volumeNames = runCatching { MediaStore.getExternalVolumeNames(context) }
+            .onFailure { error -> Log.e(TAG, "Cannot enumerate MediaStore volumes", error) }
+            .getOrDefault(emptySet())
+
+        Log.i(
+            TAG,
+            "Scan: user=${Process.myUserHandle()}, permissionGranted=$permissionGranted, volumes=$volumeNames"
+        )
+
+        return volumeNames
             .asSequence()
             .flatMap { volumeName -> queryVolumeVideos(volumeName).asSequence() }
             .toList()
@@ -87,18 +120,21 @@ class AssetVideoRepository @Inject constructor(
                 null,
                 "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
             )?.use { cursor ->
+                Log.i(TAG, "MediaStore query: volume=$volumeName, uri=$collection, rows=${cursor.count}")
                 val idIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
                 val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
                 buildList {
                     while (cursor.moveToNext()) {
                         val fileName = cursor.getString(nameIndex) ?: continue
                         if (!MediaFileTypes.isSupportedVideoFileName(fileName)) continue
+                        val contentUri = ContentUris.withAppendedId(
+                            collection,
+                            cursor.getLong(idIndex)
+                        )
+                        Log.i(TAG, "Accepted video: name=$fileName, uri=$contentUri")
                         add(
                             AssetVideo(
-                                assetPath = ContentUris.withAppendedId(
-                                    collection,
-                                    cursor.getLong(idIndex)
-                                ).toString(),
+                                assetPath = contentUri.toString(),
                                 fileName = fileName,
                                 title = fileName.substringBeforeLast('.').toVideoTitle(),
                                 isPackagedAsset = false
@@ -106,7 +142,11 @@ class AssetVideoRepository @Inject constructor(
                         )
                     }
                 }
-            }.orEmpty()
+            } ?: emptyList<AssetVideo>().also {
+                Log.w(TAG, "MediaStore query returned null cursor: volume=$volumeName, uri=$collection")
+            }
+        }.onFailure { error ->
+            Log.e(TAG, "MediaStore query failed: volume=$volumeName, uri=$collection", error)
         }.getOrDefault(emptyList())
     }
 
@@ -141,9 +181,10 @@ class AssetVideoRepository @Inject constructor(
         return split('_').filter { it.isNotBlank() }.joinToString(" ") { part ->
             part.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase() else char.toString() }
         }
-    }
+}
 
     private companion object {
+        const val TAG = "CoWatchVideoCatalog"
         const val VIDEO_ASSET_ROOT = "fileVideoSample"
         val VIDEO_PROJECTION = arrayOf(
             MediaStore.MediaColumns._ID,

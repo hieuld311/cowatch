@@ -121,7 +121,12 @@ class AssetVideoThumbnailCache @Inject constructor(
     }
 
     private fun AssetVideo.usesPersistentCache(profile: ThumbnailProfile): Boolean {
-        return isPackagedAsset && profile.persistentDiskCache
+        // External storage is normally transient, but launcher artwork is requested while
+        // playback is active. Persisting it lets the system media widget reuse the decoded
+        // frame without repeatedly opening a USB/storage video.
+        return profile.persistentDiskCache && (
+            isPackagedAsset || profile == ThumbnailProfile.LauncherArtwork
+        )
     }
 
     private fun decodeThumbnail(

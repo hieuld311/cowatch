@@ -26,5 +26,8 @@ enum class ThumbnailProfile(
     val persistentDiskCache: Boolean
 ) {
     Rail(width = 426, height = 240, persistentDiskCache = false),
-    Background(width = 1280, height = 720, persistentDiskCache = true)
+    Background(width = 1280, height = 720, persistentDiskCache = true),
+    // Compact JPEG source for launcher/media-session artwork. Keeping this below 0.5 MP
+    // avoids sending a full playback frame through MediaSession binder metadata.
+    LauncherArtwork(width = 480, height = 270, persistentDiskCache = true)
 }

@@ -1,6 +1,9 @@
 package com.ivi.common.playback
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.os.Handler
+import android.os.Looper
 import android.view.Surface
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
@@ -14,27 +17,44 @@ import androidx.media3.exoplayer.mediacodec.MediaCodecSelector
 import androidx.media3.session.MediaSession
 import androidx.media3.session.SessionResult
 import androidx.media3.ui.PlayerView
+import com.ivi.common.domain.AssetVideo
 import com.ivi.common.domain.VideoSource
 import com.ivi.common.domain.InAppPipState
 import com.ivi.common.domain.PlaybackController
 import com.ivi.common.domain.SessionPlaybackState
+import com.ivi.common.media.ThumbnailLoader
+import com.ivi.common.media.ThumbnailProfile
 import com.ivi.common.playback.PlayerSurfaceController
 import com.ivi.common.playback.togglePlayback
 import com.ivi.common.playback.toMediaItem
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+private const val MEDIA_SESSION_ARTWORK_QUALITY = 78
+private const val MAX_MEDIA_SESSION_ARTWORK_BYTES = 128 * 1024
 
 @Singleton
 class Media3PlaybackController @Inject constructor(
-    @ApplicationContext context: Context
+    @ApplicationContext context: Context,
+    private val thumbnailLoader: ThumbnailLoader
 ) : PlaybackController, PlayerSurfaceController {
     private val appContext = context.applicationContext
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val artworkScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var artworkJob: Job? = null
     private var sessionPlayer: ExoPlayer? = null
     private var mediaSession: MediaSession? = null
     private var activePlayerView: PlayerView? = null
@@ -118,6 +138,7 @@ class Media3PlaybackController @Inject constructor(
         player.setMediaItem(source.toMediaItem())
         player.prepare()
         player.play()
+        loadSessionArtwork(source)
     }
 
     // PiP state is an app-level preview state, not Android system PiP.
@@ -175,6 +196,7 @@ class Media3PlaybackController @Inject constructor(
         player.setPlaybackSpeed(snapshot.playbackSpeed)
         player.prepare()
         player.playWhenReady = snapshot.wasPlaying
+        loadSessionArtwork(source)
         _pipState.value = if (snapshot.destination == LocalPlaybackDestination.LIBRARY_PIP) {
             InAppPipState(source)
         } else {
@@ -241,6 +263,8 @@ class Media3PlaybackController @Inject constructor(
     }
 
     private fun stopPlaybackInternal(notifyEnded: Boolean) {
+        artworkJob?.cancel()
+        artworkJob = null
         activePlayerView?.player = null
         activePlayerView = null
         // The PID fanout input Surface is process-owned and remains valid across logical stops.
@@ -259,12 +283,64 @@ class Media3PlaybackController @Inject constructor(
 
     fun releaseProcessResources() {
         stopPlaybackInternal(notifyEnded = false)
+        artworkScope.cancel()
         sessionPlayer?.clearVideoSurface()
         externalVideoSurface = null
         mediaSession?.release()
         mediaSession = null
         sessionPlayer?.release()
         sessionPlayer = null
+    }
+
+    /**
+     * Publishes the same decoded video frame that the in-app library uses as Media3 artwork.
+     * Every flavour owns this controller in its own process, so CID, PID and both Rear launchers
+     * expose artwork through their own MediaSession without cross-display state sharing.
+     */
+    private fun loadSessionArtwork(source: VideoSource.Asset) {
+        artworkJob?.cancel()
+        artworkJob = artworkScope.launch {
+            val bitmap = thumbnailLoader.getOrLoad(
+                source.toThumbnailAsset(),
+                ThumbnailProfile.LauncherArtwork
+            ) ?: return@launch
+            val artwork = bitmap.toMediaSessionArtwork() ?: return@launch
+
+            mainHandler.post {
+                if (currentSource?.assetPath != source.assetPath) return@post
+                val player = sessionPlayer ?: return@post
+                val index = player.currentMediaItemIndex
+                val currentItem = player.currentMediaItem ?: return@post
+                if (index == C.INDEX_UNSET) return@post
+
+                val updatedItem = currentItem.buildUpon()
+                    .setMediaMetadata(
+                        currentItem.mediaMetadata.buildUpon()
+                            .setArtworkData(artwork)
+                            .build()
+                    )
+                    .build()
+                player.replaceMediaItem(index, updatedItem)
+            }
+        }
+    }
+
+    private fun VideoSource.Asset.toThumbnailAsset(): AssetVideo {
+        return AssetVideo(
+            assetPath = assetPath,
+            fileName = assetPath.substringAfterLast('/').ifBlank { title },
+            title = title,
+            isPackagedAsset = isPackagedAsset
+        )
+    }
+
+    private fun Bitmap.toMediaSessionArtwork(): ByteArray? {
+        return ByteArrayOutputStream().use { output ->
+            if (!compress(Bitmap.CompressFormat.JPEG, MEDIA_SESSION_ARTWORK_QUALITY, output)) {
+                return null
+            }
+            output.toByteArray().takeIf { it.size <= MAX_MEDIA_SESSION_ARTWORK_BYTES }
+        }
     }
 
     private val nonQualcommAacCodecSelector = MediaCodecSelector {

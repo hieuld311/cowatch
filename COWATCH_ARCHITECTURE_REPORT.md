@@ -220,6 +220,24 @@ The current protocol version is `4`.
   guarantee.
 - Binder death handling checks Binder identity so an old callback cannot remove a newer receiver registration.
 
+### Receiver consent ownership and dismissal
+
+PID distinguishes a temporary cold-start consent UI from a dialog shown by an already-running
+Rear APK. This distinction is explicit; immersive-fullscreen state is not used as a process-lifecycle
+signal.
+
+- When a selected Rear is not registered `READY`, `RearAppLauncher` starts
+  `ReceiverConsentActivity` with `ShareProtocol.EXTRA_CONSENT_BOOTSTRAP = true`.
+- A dialog rendered by an existing `VideoLibraryActivity` or `FrontPlayerActivity` is warm-app UI.
+  Dismiss reports `DENIED` and clears the request, but retains the Activity, AIDL connection,
+  receiver registration and Rear process.
+- Dismiss from the bootstrap consent Activity reports `DENIED`, unregisters its AIDL receiver,
+  unbinds from the PID service, clears its display/ready state, removes the temporary task and then
+  terminates that Rear process. PID therefore cannot retain a stale `READY` receiver, and a later
+  share request cold-launches a fresh consent Activity.
+- Accept never runs the bootstrap shutdown path. The Rear process and connection remain alive while
+  the shared player is launched.
+
 The sharing state machine is:
 
 ```text
@@ -256,9 +274,14 @@ flowchart TD
     I0 -- "Yes" --> I
 
     I --> J{"Rear response within 12 seconds?"}
-    J -- "Dismiss or timeout" --> J1["Leave that Rear local; remove role"]
+    J -- "Dismiss" --> J1{"Bootstrap consent Activity?"}
+    J1 -- "Yes" --> J1A["Report DENIED; unregister and unbind;<br/>remove task and stop Rear process"]
+    J1 -- "No; APK already open" --> J1B["Report DENIED; close only dialog;<br/>keep Rear process and registration"]
+    J -- "Timeout" --> J1C["Remove role; keep Rear local"]
     J -- "Accept or auto-accept after 10 seconds" --> K["Rear saves local state; releases local media;<br/>sets shared mode and opens shared player"]
-    J1 --> J2{"Any accepted role remains?"}
+    J1A --> J2{"Any accepted role remains?"}
+    J1B --> J2
+    J1C --> J2
     J2 -- "No" --> Z1
     J2 -- "Yes" --> L
     K --> L["Rear SurfaceView registers<br/>sessionId + surface generation"]
@@ -320,6 +343,8 @@ One idempotent PID completion path is used for denial, timeout, target departure
 - On PID service/process disconnect, a Rear clears shared mode and restores its saved local
   destination. It does not schedule a new bind automatically; it registers again when its
   Activity next supplies/refreshes the display.
+- Explicit Dismiss from a PID-launched bootstrap consent Activity also removes the temporary Rear
+  registration and process. Dismiss from an already-running Rear UI preserves its standalone state.
 
 ## 10. Hilt composition
 
@@ -391,6 +416,9 @@ Full remaining real-device coverage is defined in `COWATCH_REAL_DEVICE_MANUAL_TE
   PID service forwards the role but not the supplied session ID to coordinator validation.
 - After PID dies, Rear restores local playback but does not independently retry service binding.
   A foreground/recreated Rear Activity performs the next registration attempt.
+- The bootstrap cleanup is attached to the explicit user Dismiss callback. A host-side timeout or
+  cancellation that only clears the pending request finishes `ReceiverConsentActivity` through its
+  state observer but does not execute the same unregister/unbind/process-termination sequence.
 - Renderer correctness, one-decoder behavior, cross-display launch permission, black-frame
   recovery and synchronization timing remain real-device assertions. They cannot be proven by
   this report or source inspection alone.

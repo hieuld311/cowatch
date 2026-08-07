@@ -16,7 +16,8 @@
             android:name="com.ivi.pid.ui.VideoLibraryActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:resizeableActivity="true">
+            android:resizeableActivity="true"
+            android:theme="@style/VideoLibraryTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

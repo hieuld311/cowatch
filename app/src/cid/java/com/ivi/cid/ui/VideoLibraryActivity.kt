@@ -1,11 +1,15 @@
 package com.ivi.cid.ui
 
+import android.graphics.Color
 import android.os.Bundle
 import android.content.pm.PackageManager
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.runtime.getValue
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ivi.cid.app.CIDVideoNavigation
 import com.ivi.common.media.ThumbnailLoader
@@ -30,6 +34,7 @@ class VideoLibraryActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        configureLibrarySystemBars()
         requestUsbVideoPermissionIfNeeded()
 
         setContent {
@@ -56,6 +61,29 @@ class VideoLibraryActivity : ComponentActivity() {
                     }
                 )
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        configureLibrarySystemBars()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) configureLibrarySystemBars()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun configureLibrarySystemBars() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
+        window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+        window.statusBarColor = Color.TRANSPARENT
+        window.isStatusBarContrastEnforced = false
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            show(WindowInsetsCompat.Type.statusBars())
+            isAppearanceLightStatusBars = false
         }
     }
 

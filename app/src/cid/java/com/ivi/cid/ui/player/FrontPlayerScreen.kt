@@ -17,7 +17,9 @@ internal fun FrontPlayerScreen(
     activeAssetPath: String?,
     onPlayerViewReady: (PlayerView?) -> Unit,
     onCloseClick: () -> Unit,
-    onPictureInPictureClick: () -> Unit
+    onPictureInPictureClick: () -> Unit,
+    onPreviousVideo: () -> Unit,
+    onNextVideo: () -> Unit
 ) {
     PlayerScreenFrame(
         onCloseClick = onCloseClick,
@@ -34,6 +36,8 @@ internal fun FrontPlayerScreen(
                 seekFrameProvider = seekFrameProvider,
                 activeAssetPath = activeAssetPath,
                 onPictureInPictureClick = onPictureInPictureClick,
+                onPreviousVideo = onPreviousVideo,
+                onNextVideo = onNextVideo,
                 modifier = Modifier.matchParentSize()
             )
         }

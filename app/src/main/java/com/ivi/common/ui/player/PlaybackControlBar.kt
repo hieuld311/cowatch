@@ -42,6 +42,7 @@ public const val PLAYBACK_CONTROL_BAR_HEIGHT_DP = 154
 
 private const val PLAYBACK_POSITION_UPDATE_DELAY_MS = 500L
 private const val CONTROLS_AUTO_HIDE_DELAY_MS = 5_000L
+private const val REWIND_TICK_DELAY_MS = 100L
 private val CONTROL_BAR_BACKGROUND_HEIGHT = 134.dp
 private val CONTROL_BAR_HEIGHT = PLAYBACK_CONTROL_BAR_HEIGHT_DP.dp
 private val TIMELINE_HEIGHT = 48.dp
@@ -55,6 +56,8 @@ public fun PlaybackControlBar(
     activeAssetPath: String?,
     seekFrameProvider: SeekFrameProvider,
     onPictureInPictureClick: () -> Unit,
+    onPreviousVideo: () -> Unit,
+    onNextVideo: () -> Unit,
     modifier: Modifier = Modifier,
     showVideoTitle: Boolean = false,
     controlsEnabled: Boolean = true,
@@ -72,7 +75,11 @@ public fun PlaybackControlBar(
         }
         player.addListener(listener)
         controlsState.refresh(updateSlider = true)
-        onDispose { player.removeListener(listener) }
+        onDispose {
+            controlsState.endRewind()
+            controlsState.endFastForward()
+            player.removeListener(listener)
+        }
     }
 
     LaunchedEffect(player, controlsState.isPlaying, controlsState.isDragging) {
@@ -83,12 +90,25 @@ public fun PlaybackControlBar(
         }
     }
 
+    LaunchedEffect(controlsState.isRewinding) {
+        while (controlsState.isRewinding) {
+            controlsState.rewindStep()
+            delay(REWIND_TICK_DELAY_MS)
+        }
+    }
+
     LaunchedEffect(
         controlsState.interactionVersion,
         controlsState.controlsVisible,
-        controlsState.isDragging
+        controlsState.isDragging,
+        controlsState.isRewinding,
+        controlsState.isFastForwarding
     ) {
-        if (controlsState.controlsVisible && !controlsState.isDragging) {
+        if (controlsState.controlsVisible &&
+            !controlsState.isDragging &&
+            !controlsState.isRewinding &&
+            !controlsState.isFastForwarding
+        ) {
             delay(CONTROLS_AUTO_HIDE_DELAY_MS)
             controlsState.hideControlsIfIdle()
         }
@@ -152,6 +172,8 @@ public fun PlaybackControlBar(
                     TransportControls(
                         controlsState = controlsState,
                         onPictureInPictureClick = onPictureInPictureClick,
+                        onPreviousVideo = onPreviousVideo,
+                        onNextVideo = onNextVideo,
                         leadingControl = leadingControl,
                         trailingControl = trailingControl,
                         controlsEnabled = controlsEnabled,
@@ -302,6 +324,8 @@ private fun PlaybackTimeline(
 private fun TransportControls(
     controlsState: PlaybackControlsState,
     onPictureInPictureClick: () -> Unit,
+    onPreviousVideo: () -> Unit,
+    onNextVideo: () -> Unit,
     leadingControl: (@Composable (onInteraction: () -> Unit) -> Unit)?,
     trailingControl: (@Composable () -> Unit)?,
     controlsEnabled: Boolean,
@@ -328,11 +352,13 @@ private fun TransportControls(
             PressStateIconButton(
                 normalDrawable = R.drawable.ico_media_prev_n,
                 pressedDrawable = R.drawable.ico_media_prev_p,
-                contentDescription = "Back",
+                contentDescription = "Previous video",
                 layoutSize = TRANSPORT_SLOT_SIZE,
                 iconSize = TRANSPORT_ICON_SIZE,
-                onClick = controlsState::seekBack,
-                enabled = controlsEnabled
+                onClick = onPreviousVideo,
+                enabled = controlsEnabled,
+                onLongPressStart = controlsState::beginRewind,
+                onLongPressEnd = controlsState::endRewind
             )
         },
         centerControl = {
@@ -347,11 +373,13 @@ private fun TransportControls(
             PressStateIconButton(
                 normalDrawable = R.drawable.ico_media_next_n,
                 pressedDrawable = R.drawable.ico_media_next_p,
-                contentDescription = "Forward",
+                contentDescription = "Next video",
                 layoutSize = TRANSPORT_SLOT_SIZE,
                 iconSize = TRANSPORT_ICON_SIZE,
-                onClick = controlsState::seekForward,
-                enabled = controlsEnabled
+                onClick = onNextVideo,
+                enabled = controlsEnabled,
+                onLongPressStart = controlsState::beginFastForward,
+                onLongPressEnd = controlsState::endFastForward
             )
             PressStateIconButton(
                 normalDrawable = R.drawable.ico_media_collapse_n,

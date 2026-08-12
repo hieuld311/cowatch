@@ -20,6 +20,7 @@ import com.ivi.cid.app.CIDVideoNavigation
 import com.ivi.common.domain.VideoSource
 import com.ivi.common.media.SeekFrameProvider
 import com.ivi.common.playback.Media3PlaybackController
+import com.ivi.common.playback.VideoCatalogNavigator
 import com.ivi.cid.ui.player.FrontPlayerScreen
 import com.ivi.common.ui.player.hasAudioTrackInitializationFailure
 import com.ivi.common.ui.CoWatchTheme
@@ -39,6 +40,9 @@ class FrontPlayerActivity : ComponentActivity() {
 
     @Inject
     lateinit var seekFrameProvider: SeekFrameProvider
+
+    @Inject
+    lateinit var videoCatalogNavigator: VideoCatalogNavigator
 
     private val viewModel: PlayerViewModel by viewModels()
     private var playerView: PlayerView? = null
@@ -73,7 +77,9 @@ class FrontPlayerActivity : ComponentActivity() {
                     activeAssetPath = playbackState.activeSource?.assetPath,
                     onPlayerViewReady = { playerView = it },
                     onCloseClick = ::closePlayer,
-                    onPictureInPictureClick = ::enterInAppPip
+                    onPictureInPictureClick = ::enterInAppPip,
+                    onPreviousVideo = ::showPreviousVideo,
+                    onNextVideo = ::showNextVideo
                 )
             }
         }
@@ -129,6 +135,14 @@ class FrontPlayerActivity : ComponentActivity() {
     private fun enterInAppPip() {
         viewModel.enterInAppPip()
         startActivity(CIDVideoNavigation.createLibraryIntent(this))
+    }
+
+    private fun showPreviousVideo() {
+        videoCatalogNavigator.previous(playbackController.currentSource)?.let(::showFullscreenVideo)
+    }
+
+    private fun showNextVideo() {
+        videoCatalogNavigator.next(playbackController.currentSource)?.let(::showFullscreenVideo)
     }
 
     private fun closePlayer() {

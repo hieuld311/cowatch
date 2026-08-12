@@ -37,7 +37,9 @@ internal fun FrontPlayerScreen(
     onShareDialogDismiss: () -> Unit,
     onStartSharing: (Set<String>) -> Unit,
     onBackClick: () -> Unit,
-    onPictureInPictureClick: () -> Unit
+    onPictureInPictureClick: () -> Unit,
+    onPreviousVideo: () -> Unit,
+    onNextVideo: () -> Unit
 ) {
     PlayerScreenFrame(
         onCloseClick = onBackClick,
@@ -66,7 +68,9 @@ internal fun FrontPlayerScreen(
                 seekFrameProvider = seekFrameProvider,
                 broadcastChecked = broadcastChecked,
                 onBroadcastCheckedChange = onBroadcastCheckedChange,
-                onPictureInPictureClick = onPictureInPictureClick
+                onPictureInPictureClick = onPictureInPictureClick,
+                onPreviousVideo = onPreviousVideo,
+                onNextVideo = onNextVideo
             )
         },
         overlays = {

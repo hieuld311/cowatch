@@ -106,12 +106,12 @@ Source: `app/src/main/java/com/ivi/common/ui/player/PlayerScreenFrame.kt`, `Play
 | Seek track | Visual height 40dp; track 6dp | `img_general_progress_bar_track`, `img_general_progress_bar_filled_track` | Asset-defined | None |
 | Seek handle | 40dp | `img_general_slider_handle_[n/p]` | Asset-defined | None |
 | Seek interaction strip | 16dp high, centered on track | Transparent interaction area | None | None |
-| Transport layout | Fixed 124dp slots; center Play stays geometrically centered; non-primary glyphs 40dp | Speed, previous, next and collapse bitmap assets | Asset-defined | No visible text |
+| Transport layout | Fixed 124dp slots; center Play stays geometrically centered; non-primary glyphs 40dp | Speed, previous, next and collapse bitmap assets | Asset-defined | No visible text. Tap Previous/Next selects the adjacent catalog video (circular). Hold Previous simulates reverse at 1.5x with timed seeks; hold Next plays at 1.5x. Releasing either restores prior speed and play/pause state. |
 | Elapsed / total time | Timeline bottom; horizontal inset 28dp, bottom 6dp; 52dp text width each | `contentPrimary` at 70% alpha | None | Dynamic `HH:MM` / `HH:MM:SS`; `labelSmall`, 11sp |
 | Player video title | Only when `showVideoTitle=true`; top-start; all-side 80dp padding; one line | `contentPrimary` | None | Dynamic media title; `headlineSmall`, 24sp bold |
 | Seek-frame preview | 240dp × 135dp when frame exists; 88dp × 44dp fallback; above controls | Black `playerCanvas`; 1dp `seekPreviewOutline` (white 70%); timestamp scrim `playerScrim` (black 68%) | Preview 8dp; timestamp 4dp | Dynamic time; `contentPrimary`; `labelMedium`, 12sp |
 
-Common transport a11y labels: `Playback speed 1X`, `Playback speed 1.5X`, `Playback speed 2X`, `Back`, `Forward`, `Collapse player`, `Play video`, `Pause video`, and `Close player`.
+Common transport a11y labels: `Playback speed 1X`, `Playback speed 1.5X`, `Playback speed 2X`, `Previous video`, `Next video`, `Collapse player`, `Play video`, `Pause video`, and `Close player`.
 
 ## 8. CID Player
 

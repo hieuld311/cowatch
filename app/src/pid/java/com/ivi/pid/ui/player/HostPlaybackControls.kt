@@ -25,6 +25,8 @@ internal fun HostPlaybackControls(
     broadcastChecked: Boolean,
     onBroadcastCheckedChange: (Boolean) -> Unit,
     onPictureInPictureClick: () -> Unit,
+    onPreviousVideo: () -> Unit,
+    onNextVideo: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     PlaybackControlBar(
@@ -32,6 +34,8 @@ internal fun HostPlaybackControls(
         activeAssetPath = activeAssetPath,
         seekFrameProvider = seekFrameProvider,
         onPictureInPictureClick = onPictureInPictureClick,
+        onPreviousVideo = onPreviousVideo,
+        onNextVideo = onNextVideo,
         modifier = modifier,
         showVideoTitle = true,
         controlBackgroundDrawable = R.drawable.img_media_passenger_control_background,

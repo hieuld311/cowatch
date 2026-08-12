@@ -27,6 +27,7 @@ import com.ivi.common.ipc.SharedSessionSnapshot
 import com.ivi.common.media.SeekFrameProvider
 import com.ivi.common.playback.Media3PlaybackController
 import com.ivi.common.playback.LocalPlaybackDestination
+import com.ivi.common.playback.VideoCatalogNavigator
 import com.ivi.common.ui.CoWatchTheme
 import com.ivi.common.ui.enterImmersiveFullscreen
 import com.ivi.common.ui.player.FanoutVideoSurface
@@ -45,6 +46,7 @@ class FrontPlayerActivity : ComponentActivity() {
     @Inject lateinit var playbackController: Media3PlaybackController
     @Inject lateinit var seekFrameProvider: SeekFrameProvider
     @Inject lateinit var shareClient: RearShareClient
+    @Inject lateinit var videoCatalogNavigator: VideoCatalogNavigator
     private var playerView: PlayerView? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -128,6 +130,8 @@ class FrontPlayerActivity : ComponentActivity() {
                                 activeAssetPath = playbackController.currentSource?.assetPath,
                                 seekFrameProvider = seekFrameProvider,
                                 onPictureInPictureClick = ::enterInAppPip,
+                                onPreviousVideo = ::showPreviousVideo,
+                                onNextVideo = ::showNextVideo,
                                 showVideoTitle = true,
                                 modifier = Modifier.fillMaxSize()
                             )
@@ -181,14 +185,26 @@ class FrontPlayerActivity : ComponentActivity() {
             finish()
             return
         }
-        playbackController.setSharedMode(false)
-        playbackController.showFullscreen(source)
+        showLocalVideo(source)
     }
 
     private fun enterInAppPip() {
         if (shareClient.sharedSession.value != null) return
         playbackController.enterInAppPip()
         startActivity(RearNavigation.libraryIntent(this))
+    }
+
+    private fun showPreviousVideo() {
+        videoCatalogNavigator.previous(playbackController.currentSource)?.let(::showLocalVideo)
+    }
+
+    private fun showNextVideo() {
+        videoCatalogNavigator.next(playbackController.currentSource)?.let(::showLocalVideo)
+    }
+
+    private fun showLocalVideo(source: VideoSource.Asset) {
+        playbackController.setSharedMode(false)
+        playbackController.showFullscreen(source)
     }
 
     private fun closePlayer() {

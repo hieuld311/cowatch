@@ -37,11 +37,17 @@ public class PlaybackControlsState(
         private set
     var isDragging by mutableStateOf(false)
         private set
+    var isRewinding by mutableStateOf(false)
+        private set
+    var isFastForwarding by mutableStateOf(false)
+        private set
     var controlsVisible by mutableStateOf(true)
         private set
     var interactionVersion by mutableIntStateOf(0)
         private set
     private var resumePlaybackAfterSeek = false
+    private var playbackParametersBeforeTransportHold = PlaybackParameters.DEFAULT
+    private var resumePlaybackAfterTransportHold = false
 
     val speedOption: PlaybackSpeedOption
         get() = playbackSpeedOption(playbackSpeed)
@@ -97,37 +103,66 @@ public class PlaybackControlsState(
     }
 
     fun cyclePlaybackSpeed() {
+        if (isRewinding || isFastForwarding) return
         showControls()
         val nextSpeedOption = nextPlaybackSpeedOption(playbackSpeed)
         player.playbackParameters = PlaybackParameters(nextSpeedOption.speed)
         playbackSpeed = nextSpeedOption.speed
     }
 
-    fun seekBack() {
-        showControls()
-        val target = (player.safeCurrentPositionMs - SEEK_STEP_MS).coerceAtLeast(0L)
+    fun beginRewind() {
+        if (isRewinding || isFastForwarding || isDragging) return
+        prepareTransportHold()
+        isRewinding = true
+        player.pause()
+    }
+
+    fun rewindStep() {
+        if (!isRewinding) return
+        val target = (player.safeCurrentPositionMs - REWIND_STEP_MS).coerceAtLeast(0L)
         player.seekTo(target)
         sliderPositionMs = target
     }
+
+    fun endRewind() = endTransportHold()
 
     fun togglePlayback() {
         showControls()
         player.togglePlayback()
     }
 
-    fun seekForward() {
+    fun beginFastForward() {
+        if (isRewinding || isFastForwarding || isDragging) return
+        prepareTransportHold()
+        isFastForwarding = true
+        player.playbackParameters = PlaybackParameters(TRANSPORT_HOLD_SPEED)
+        player.play()
+    }
+
+    fun endFastForward() = endTransportHold()
+
+    private fun prepareTransportHold() {
         showControls()
-        val target = player.safeCurrentPositionMs + SEEK_STEP_MS
-        val targetPosition = if (durationMs > 0L) {
-            target.coerceAtMost(durationMs)
+        playbackParametersBeforeTransportHold = player.playbackParameters
+        resumePlaybackAfterTransportHold = player.playWhenReady
+    }
+
+    private fun endTransportHold() {
+        if (!isRewinding && !isFastForwarding) return
+        isRewinding = false
+        isFastForwarding = false
+        player.playbackParameters = playbackParametersBeforeTransportHold
+        if (resumePlaybackAfterTransportHold) {
+            player.play()
         } else {
-            target
+            player.pause()
         }
-        player.seekTo(targetPosition)
-        sliderPositionMs = targetPosition
+        resumePlaybackAfterTransportHold = false
+        showControls()
     }
 
     companion object {
-        private const val SEEK_STEP_MS = 5_000L
+        const val TRANSPORT_HOLD_SPEED = 1.5f
+        const val REWIND_STEP_MS = 150L
     }
 }

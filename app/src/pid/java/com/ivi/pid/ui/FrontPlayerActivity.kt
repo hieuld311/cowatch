@@ -18,6 +18,7 @@ import androidx.media3.common.Player
 import com.ivi.common.domain.VideoSource
 import com.ivi.common.media.SeekFrameProvider
 import com.ivi.common.playback.Media3PlaybackController
+import com.ivi.common.playback.VideoCatalogNavigator
 import com.ivi.common.ui.CoWatchTheme
 import com.ivi.common.ui.enterImmersiveFullscreen
 import com.ivi.common.ui.player.hasAudioTrackInitializationFailure
@@ -36,6 +37,7 @@ class FrontPlayerActivity : ComponentActivity() {
     @Inject lateinit var playbackController: Media3PlaybackController
     @Inject lateinit var seekFrameProvider: SeekFrameProvider
     @Inject lateinit var renderFanout: PidRenderFanout
+    @Inject lateinit var videoCatalogNavigator: VideoCatalogNavigator
 
     private val viewModel: FrontPlayerViewModel by viewModels()
     private val showShareDialog = mutableStateOf(false)
@@ -80,7 +82,9 @@ class FrontPlayerActivity : ComponentActivity() {
                     onShareDialogDismiss = ::dismissShareDialog,
                     onStartSharing = ::startSharing,
                     onBackClick = ::closePlayer,
-                    onPictureInPictureClick = ::enterInAppPip
+                    onPictureInPictureClick = ::enterInAppPip,
+                    onPreviousVideo = ::showPreviousVideo,
+                    onNextVideo = ::showNextVideo
                 )
             }
         }
@@ -170,6 +174,14 @@ class FrontPlayerActivity : ComponentActivity() {
             Intent(this, VideoLibraryActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         )
+    }
+
+    private fun showPreviousVideo() {
+        videoCatalogNavigator.previous(playbackController.currentSource)?.let(::show)
+    }
+
+    private fun showNextVideo() {
+        videoCatalogNavigator.next(playbackController.currentSource)?.let(::show)
     }
 
     private fun closePlayer() {

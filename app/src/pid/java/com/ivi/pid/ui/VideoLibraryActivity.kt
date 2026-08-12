@@ -61,6 +61,7 @@ class VideoLibraryActivity : ComponentActivity() {
                     onFocusedVideoPlay = { video ->
                         startActivity(FrontPlayerContract.createIntent(this, video))
                     },
+                    useFocusedVideoSizeForPip = true,
                     pipVideoSurface = {
                         FanoutVideoSurface(
                             modifier = Modifier.fillMaxSize(),

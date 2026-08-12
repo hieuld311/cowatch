@@ -41,6 +41,8 @@ public class PlaybackControlsState(
         private set
     var isFastForwarding by mutableStateOf(false)
         private set
+    var rewindRenderedFrameVersion by mutableIntStateOf(0)
+        private set
     var controlsVisible by mutableStateOf(true)
         private set
     var interactionVersion by mutableIntStateOf(0)
@@ -117,11 +119,20 @@ public class PlaybackControlsState(
         player.pause()
     }
 
-    fun rewindStep() {
-        if (!isRewinding) return
-        val target = (player.safeCurrentPositionMs - REWIND_STEP_MS).coerceAtLeast(0L)
+    fun rewindStep(): Boolean {
+        if (!isRewinding) return false
+        // Media3 has no reverse renderer. Timed seeks simulate reverse at the configured speed.
+        val rewindStepMs = (TRANSPORT_HOLD_TICK_DELAY_MS * TRANSPORT_HOLD_SPEED).toLong()
+        val positionMs = player.safeCurrentPositionMs
+        val target = (positionMs - rewindStepMs).coerceAtLeast(0L)
+        if (target == positionMs) return false
         player.seekTo(target)
         sliderPositionMs = target
+        return true
+    }
+
+    fun onRenderedFirstFrame() {
+        if (isRewinding) rewindRenderedFrameVersion += 1
     }
 
     fun endRewind() = endTransportHold()
@@ -162,7 +173,7 @@ public class PlaybackControlsState(
     }
 
     companion object {
-        const val TRANSPORT_HOLD_SPEED = 1.5f
-        const val REWIND_STEP_MS = 150L
+        const val TRANSPORT_HOLD_SPEED = 2f
+        const val TRANSPORT_HOLD_TICK_DELAY_MS = 100L
     }
 }

@@ -89,9 +89,9 @@ Source: `app/src/main/java/com/ivi/common/ui/pidlibrary/VideoLibraryScreen.kt`, 
 | Focused-card play | Bottom-start inside selected card | Shared primary play control | Bitmap-defined | None |
 | Rail gesture / motion | Horizontal drag; 320ms focus settle | N/A | N/A | None |
 | Rail progress | Bottom of screen; side insets `55px`; height 6dp; 420ms animation | `img_general_progress_bar_track` + `img_general_progress_bar_filled_track` | Asset-defined | None |
-| In-app PiP | Top-end; `top=56dp`, `end=28dp`; `396px × 223px` | PID: fanout surface; Rear: Media3 surface; shared PiP controls | Surface shape not declared | None |
+| In-app PiP | Top-end; `top=56dp`, `end=28dp`; PID `604px × 340px`; Rear `396px × 223px` | PID: fanout surface; Rear: Media3 surface; shared PiP controls | Surface shape not declared | None |
 
-Rear Left and Rear Right use this exact Library UI source. PID differs only in its PiP surface implementation.
+Rear Left and Rear Right use this exact Library UI source. PID supplies its fanout surface and opts into focused-card PiP sizing; Rear keeps the default normal-card PiP sizing.
 
 ## 7. Common local-player controls
 
@@ -106,7 +106,7 @@ Source: `app/src/main/java/com/ivi/common/ui/player/PlayerScreenFrame.kt`, `Play
 | Seek track | Visual height 40dp; track 6dp | `img_general_progress_bar_track`, `img_general_progress_bar_filled_track` | Asset-defined | None |
 | Seek handle | 40dp | `img_general_slider_handle_[n/p]` | Asset-defined | None |
 | Seek interaction strip | 16dp high, centered on track | Transparent interaction area | None | None |
-| Transport layout | Fixed 124dp slots; center Play stays geometrically centered; non-primary glyphs 40dp | Speed, previous, next and collapse bitmap assets | Asset-defined | No visible text. Tap Previous/Next selects the adjacent catalog video (circular). Hold Previous simulates reverse at 1.5x with timed seeks; hold Next plays at 1.5x. Releasing either restores prior speed and play/pause state. |
+| Transport layout | Fixed 124dp slots; center Play stays geometrically centered; non-primary glyphs 40dp | Speed, previous, next and collapse bitmap assets | Asset-defined | No visible text. Tap Previous/Next selects the adjacent catalog video (circular). Hold Previous simulates reverse at 2x with timed seeks; hold Next plays at 2x. Releasing either restores prior speed and play/pause state. |
 | Elapsed / total time | Timeline bottom; horizontal inset 28dp, bottom 6dp; 52dp text width each | `contentPrimary` at 70% alpha | None | Dynamic `HH:MM` / `HH:MM:SS`; `labelSmall`, 11sp |
 | Player video title | Only when `showVideoTitle=true`; top-start; all-side 80dp padding; one line | `contentPrimary` | None | Dynamic media title; `headlineSmall`, 24sp bold |
 | Seek-frame preview | 240dp × 135dp when frame exists; 88dp × 44dp fallback; above controls | Black `playerCanvas`; 1dp `seekPreviewOutline` (white 70%); timestamp scrim `playerScrim` (black 68%) | Preview 8dp; timestamp 4dp | Dynamic time; `contentPrimary`; `labelMedium`, 12sp |

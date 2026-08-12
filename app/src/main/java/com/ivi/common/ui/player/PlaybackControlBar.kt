@@ -1,5 +1,6 @@
 package com.ivi.common.ui.player
 
+import android.os.SystemClock
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -21,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.paint
@@ -37,12 +39,14 @@ import com.ivi.common.ui.PressStateIconButton
 import com.ivi.common.ui.PrimaryPlaybackButton
 import com.ivi.common.ui.coWatchColorScheme
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 public const val PLAYBACK_CONTROL_BAR_HEIGHT_DP = 154
 
 private const val PLAYBACK_POSITION_UPDATE_DELAY_MS = 500L
 private const val CONTROLS_AUTO_HIDE_DELAY_MS = 5_000L
-private const val REWIND_TICK_DELAY_MS = 100L
+private const val REWIND_FRAME_TIMEOUT_MS = 800L
 private val CONTROL_BAR_BACKGROUND_HEIGHT = 134.dp
 private val CONTROL_BAR_HEIGHT = PLAYBACK_CONTROL_BAR_HEIGHT_DP.dp
 private val TIMELINE_HEIGHT = 48.dp
@@ -69,6 +73,10 @@ public fun PlaybackControlBar(
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
+            override fun onRenderedFirstFrame() {
+                controlsState.onRenderedFirstFrame()
+            }
+
             override fun onEvents(player: Player, events: Player.Events) {
                 controlsState.refresh(updateSlider = !controlsState.isDragging)
             }
@@ -91,9 +99,21 @@ public fun PlaybackControlBar(
     }
 
     LaunchedEffect(controlsState.isRewinding) {
+        var renderedFrameVersion = controlsState.rewindRenderedFrameVersion
         while (controlsState.isRewinding) {
-            controlsState.rewindStep()
-            delay(REWIND_TICK_DELAY_MS)
+            val stepStartedAtMs = SystemClock.elapsedRealtime()
+            if (controlsState.rewindStep()) {
+                withTimeoutOrNull(REWIND_FRAME_TIMEOUT_MS) {
+                    snapshotFlow { controlsState.rewindRenderedFrameVersion }
+                        .first { it > renderedFrameVersion }
+                }
+                renderedFrameVersion = controlsState.rewindRenderedFrameVersion
+            }
+            val remainingDelayMs = (
+                PlaybackControlsState.TRANSPORT_HOLD_TICK_DELAY_MS -
+                    (SystemClock.elapsedRealtime() - stepStartedAtMs)
+                ).coerceAtLeast(0L)
+            delay(remainingDelayMs)
         }
     }
 

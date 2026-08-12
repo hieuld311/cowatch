@@ -45,6 +45,7 @@ fun VideoLibraryScreen(
     onFocusedPlaybackToggle: () -> Unit,
     onPipClose: () -> Unit,
     onFocusedVideoPlay: (AssetVideo) -> Unit,
+    useFocusedVideoSizeForPip: Boolean = false,
     pipVideoSurface: (@Composable BoxScope.() -> Unit)? = null
 ) {
     var focusedIndex by remember(videos) { mutableIntStateOf(0) }
@@ -53,6 +54,8 @@ fun VideoLibraryScreen(
     val focusedVideo = videos.getOrNull(displayFocusedIndex)
     val density = LocalDensity.current
     val railHorizontalPadding = with(density) { VIDEO_RAIL_HORIZONTAL_PADDING_PX.toDp() }
+    val pipWidthPx = if (useFocusedVideoSizeForPip) FOCUSED_VIDEO_WIDTH_PX else NORMAL_VIDEO_WIDTH_PX
+    val pipHeightPx = if (useFocusedVideoSizeForPip) FOCUSED_VIDEO_HEIGHT_PX else NORMAL_VIDEO_HEIGHT_PX
 
     Box(
         modifier = Modifier
@@ -116,13 +119,13 @@ fun VideoLibraryScreen(
                 onClose = onPipClose,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    // PiP keeps fixed library padding while matching the focused rail-card video size.
+                    // PiP keeps fixed library padding; each variant selects its required video size.
                     .padding(
                         top = 56.dp,
                         end = 28.dp
                     )
-                    .width(with(density) { NORMAL_VIDEO_WIDTH_PX.toDp() })
-                    .height(with(density) { NORMAL_VIDEO_HEIGHT_PX.toDp() })
+                    .width(with(density) { pipWidthPx.toDp() })
+                    .height(with(density) { pipHeightPx.toDp() })
             ) {
                 if (pipVideoSurface != null) {
                     pipVideoSurface()

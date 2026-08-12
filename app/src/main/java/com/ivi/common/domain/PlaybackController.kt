@@ -6,9 +6,10 @@ import kotlinx.coroutines.flow.StateFlow
 interface PlaybackController {
     val pipState: StateFlow<InAppPipState?>
     val playbackState: StateFlow<SessionPlaybackState>
-    val playbackEnded: SharedFlow<Unit>
+    val playbackCompleted: SharedFlow<Unit>
 
     fun showFullscreen(source: VideoSource.Asset)
+    fun continuePlayback(source: VideoSource.Asset)
     fun enterInAppPip()
     fun exitInAppPip()
     fun togglePlayback()

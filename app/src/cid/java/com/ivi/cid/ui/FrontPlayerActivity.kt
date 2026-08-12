@@ -28,7 +28,7 @@ import com.ivi.common.ui.enterImmersiveFullscreen
 import com.ivi.cid.viewmodel.PlayerViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -64,7 +64,7 @@ class FrontPlayerActivity : ComponentActivity() {
             }
         )
         setupPlayer(source)
-        observePlaybackEnd()
+        observePlaybackCompletion()
         window.enterImmersiveFullscreen()
 
         setContent {
@@ -138,11 +138,16 @@ class FrontPlayerActivity : ComponentActivity() {
     }
 
     private fun showPreviousVideo() {
-        videoCatalogNavigator.previous(playbackController.currentSource)?.let(::showFullscreenVideo)
+        videoCatalogNavigator.previous(playbackController.currentSource)?.let(::continuePlayback)
     }
 
     private fun showNextVideo() {
-        videoCatalogNavigator.next(playbackController.currentSource)?.let(::showFullscreenVideo)
+        videoCatalogNavigator.next(playbackController.currentSource)?.let(::continuePlayback)
+    }
+
+    private fun continuePlayback(source: VideoSource.Asset) {
+        audioFallbackApplied = false
+        viewModel.continuePlayback(source)
     }
 
     private fun closePlayer() {
@@ -150,11 +155,11 @@ class FrontPlayerActivity : ComponentActivity() {
         finish()
     }
 
-    private fun observePlaybackEnd() {
+    private fun observePlaybackCompletion() {
         lifecycleScope.launch {
-            viewModel.playbackEnded.collectLatest {
+            viewModel.playbackCompleted.collect {
                 if (!isFinishing && !isDestroyed) {
-                    finish()
+                    showNextVideo()
                 }
             }
         }

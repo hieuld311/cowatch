@@ -221,8 +221,6 @@ public fun ReadOnlyPlaybackControlBar(
     positionMs: Long,
     durationMs: Long,
     title: String,
-    isPlaying: Boolean,
-    playbackSpeed: Float,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
@@ -257,13 +255,7 @@ public fun ReadOnlyPlaybackControlBar(
             ) {
                 ControlBarBackground(
                     modifier = Modifier.align(Alignment.BottomCenter)
-                ) {
-                    ReadOnlyTransportControls(
-                        isPlaying = isPlaying,
-                        playbackSpeed = playbackSpeed,
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
+                )
                 PlaybackTimeline(
                     positionMs = positionMs,
                     durationMs = durationMs,
@@ -283,7 +275,7 @@ public fun ReadOnlyPlaybackControlBar(
 private fun ControlBarBackground(
     @DrawableRes backgroundDrawable: Int = R.drawable.img_media_control_background,
     modifier: Modifier = Modifier,
-    content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit
+    content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {}
 ) {
     Box(
         modifier = modifier
@@ -418,71 +410,6 @@ private fun TransportControls(
                     trailingControl()
                 }
             }
-        }
-    )
-}
-
-@Composable
-private fun ReadOnlyTransportControls(
-    isPlaying: Boolean,
-    playbackSpeed: Float,
-    modifier: Modifier = Modifier
-) {
-    val speed = playbackSpeedOption(playbackSpeed)
-    TransportControlsLayout(
-        modifier = modifier,
-        leftControls = {
-            PressStateIconButton(
-                normalDrawable = speed.iconResId,
-                pressedDrawable = speed.pressedIconResId,
-                contentDescription = "Playback speed ${speed.label}",
-                layoutSize = TRANSPORT_SLOT_SIZE,
-                iconSize = TRANSPORT_ICON_SIZE,
-                onClick = {},
-                enabled = false,
-                forcePressedVisual = true
-            )
-            PressStateIconButton(
-                normalDrawable = R.drawable.ico_media_prev_n,
-                pressedDrawable = R.drawable.ico_media_prev_p,
-                contentDescription = "Back",
-                layoutSize = TRANSPORT_SLOT_SIZE,
-                iconSize = TRANSPORT_ICON_SIZE,
-                onClick = {},
-                enabled = false,
-                forcePressedVisual = true
-            )
-        },
-        centerControl = {
-            PrimaryPlaybackButton(
-                isPlaying = isPlaying,
-                onClick = {},
-                buttonSize = TRANSPORT_SLOT_SIZE,
-                enabled = false,
-                forcePressedVisual = true
-            )
-        },
-        rightControls = {
-            PressStateIconButton(
-                normalDrawable = R.drawable.ico_media_next_n,
-                pressedDrawable = R.drawable.ico_media_next_p,
-                contentDescription = "Forward",
-                layoutSize = TRANSPORT_SLOT_SIZE,
-                iconSize = TRANSPORT_ICON_SIZE,
-                onClick = {},
-                enabled = false,
-                forcePressedVisual = true
-            )
-            PressStateIconButton(
-                normalDrawable = R.drawable.ico_media_collapse_n,
-                pressedDrawable = R.drawable.ico_media_collapse_p,
-                contentDescription = "Collapse player",
-                layoutSize = TRANSPORT_SLOT_SIZE,
-                iconSize = TRANSPORT_ICON_SIZE,
-                onClick = {},
-                enabled = false,
-                forcePressedVisual = true
-            )
         }
     )
 }

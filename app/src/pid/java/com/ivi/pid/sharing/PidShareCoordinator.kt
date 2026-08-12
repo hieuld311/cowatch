@@ -49,7 +49,7 @@ class PidShareCoordinator @Inject constructor(
     val targets: StateFlow<List<RearTargetState>> = _targets.asStateFlow()
     private val _sessionActive = MutableStateFlow(false)
     val sessionActive: StateFlow<Boolean> = _sessionActive.asStateFlow()
-    private val _hostNotifications = MutableSharedFlow<HostShareNotification>(extraBufferCapacity = 4)
+    private val _hostNotifications = MutableSharedFlow<HostShareNotification>(extraBufferCapacity = 8)
     val hostNotifications: SharedFlow<HostShareNotification> = _hostNotifications.asSharedFlow()
 
     private var activeSession: ActiveSession? = null
@@ -182,8 +182,7 @@ class PidShareCoordinator @Inject constructor(
     ): Boolean {
         finishSharingSession(
             reason = "Replaced by a new share session",
-            notifyReceivers = true,
-            notification = null
+            notifyReceivers = true
         )
         refreshTargets(hostDisplayId)
         val currentTargets = _targets.value.associateBy { it.role }
@@ -196,6 +195,7 @@ class PidShareCoordinator @Inject constructor(
         val session = ActiveSession(
             sessionId = UUID.randomUUID().toString(),
             source = source,
+            requestedRoles = validRoles.toSet(),
             selectedRoles = validRoles,
             anchorPositionMs = player.currentPosition.coerceAtLeast(0L),
             wasPlaying = wasPlayingBeforeDialog
@@ -219,6 +219,7 @@ class PidShareCoordinator @Inject constructor(
                     .launch(role, target.displayId!!)
                     .exceptionOrNull()
                 if (launchError != null) {
+                    notifyHost(session, HostShareNotificationType.DENIED, role)
                     session.selectedRoles.remove(role)
                     updateTarget(
                         role,
@@ -236,8 +237,7 @@ class PidShareCoordinator @Inject constructor(
         if (session.selectedRoles.isEmpty()) {
             finishSharingSession(
                 reason = "No Rear app could be started",
-                notifyReceivers = false,
-                notification = HostShareNotification.DENIED
+                notifyReceivers = false
             )
             return false
         }
@@ -251,12 +251,24 @@ class PidShareCoordinator @Inject constructor(
     }
 
     fun stopSharingAll(reason: String = "PID stopped sharing") {
+        activeSession?.takeIf { it.phase == SharePhase.SHARING }?.let { session ->
+            session.selectedRoles.toList().forEach { role ->
+                notifyHost(session, HostShareNotificationType.CANCELLED, role)
+            }
+        }
         finishSharingSession(
             reason = reason,
-            notifyReceivers = true,
-            notification = activeSession?.takeIf { it.phase == SharePhase.SHARING }
-                ?.let { HostShareNotification.ENDED }
+            notifyReceivers = true
         )
+    }
+
+    /** Keeps the current broadcast session and render outputs while PID changes media. */
+    fun prepareMediaChange(source: VideoSource.Asset) {
+        val session = activeSession ?: return
+        if (session.phase != SharePhase.SHARING || session.source.assetPath == source.assetPath) return
+        session.source = source
+        session.scheduledStartMs = 0L
+        seekEventId += 1
     }
 
     private fun registerReceiverInternal(
@@ -331,15 +343,23 @@ class PidShareCoordinator @Inject constructor(
 
         when (status.state) {
             ReceiverState.ACCEPTED -> {
-                session.respondedRoles += status.role
-                session.acceptedRoles += status.role
+                if (session.respondedRoles.add(status.role)) {
+                    session.acceptedRoles += status.role
+                    notifyHost(session, HostShareNotificationType.ACCEPTED, status.role)
+                }
             }
-            ReceiverState.DENIED -> session.respondedRoles += status.role
+            ReceiverState.DENIED -> {
+                if (session.respondedRoles.add(status.role)) {
+                    notifyHost(session, HostShareNotificationType.DENIED, status.role)
+                }
+            }
             ReceiverState.FAILED -> {
                 if (session.phase == SharePhase.SHARING) {
                     stopTargetInternal(status.role, status.errorMessage ?: "Rear failed", false)
                 } else {
-                    session.respondedRoles += status.role
+                    if (session.respondedRoles.add(status.role)) {
+                        notifyHost(session, HostShareNotificationType.DENIED, status.role)
+                    }
                     session.acceptedRoles -= status.role
                     session.surfaceReadyRoles -= status.role
                 }
@@ -425,10 +445,11 @@ class PidShareCoordinator @Inject constructor(
         }
         (session.selectedRoles - readyRoles).forEach { role ->
             updateTarget(role, ReceiverState.FAILED, "Rear app did not become ready")
+            notifyHost(session, HostShareNotificationType.DENIED, role)
         }
         session.selectedRoles.retainAll(readyRoles)
         if (readyRoles.isEmpty()) {
-            finishSharingSession("No Rear app became ready", false, HostShareNotification.DENIED)
+            finishSharingSession("No Rear app became ready", false)
             return
         }
 
@@ -451,6 +472,7 @@ class PidShareCoordinator @Inject constructor(
         (session.selectedRoles - acceptedRoles).forEach { role ->
             if (role !in session.respondedRoles) {
                 updateTarget(role, ReceiverState.FAILED, "Broadcast response timed out")
+                notifyHost(session, HostShareNotificationType.DENIED, role)
                 sendTo(role) {
                     it.onStopSharing(session.sessionId, "Broadcast response timed out")
                 }
@@ -458,7 +480,7 @@ class PidShareCoordinator @Inject constructor(
         }
         session.selectedRoles.retainAll(acceptedRoles)
         if (acceptedRoles.isEmpty()) {
-            finishSharingSession("Broadcast was not accepted", true, HostShareNotification.DENIED)
+            finishSharingSession("Broadcast was not accepted", true)
             return
         }
 
@@ -475,6 +497,7 @@ class PidShareCoordinator @Inject constructor(
         }
         (session.selectedRoles - surfaceReadyRoles).forEach { role ->
             updateTarget(role, ReceiverState.FAILED, "Rear render surface did not become ready")
+            notifyHost(session, HostShareNotificationType.CANCELLED, role)
             renderFanout.removeRearOutput(role)
             sendTo(role) {
                 it.onStopSharing(session.sessionId, "Rear render surface did not become ready")
@@ -482,11 +505,10 @@ class PidShareCoordinator @Inject constructor(
         }
         session.selectedRoles.retainAll(surfaceReadyRoles)
         if (surfaceReadyRoles.isEmpty()) {
-            finishSharingSession("No Rear render surface became ready", false, HostShareNotification.DENIED)
+            finishSharingSession("No Rear render surface became ready", false)
             return
         }
 
-        _hostNotifications.tryEmit(HostShareNotification.ACCEPTED)
         session.scheduledStartMs = SystemClock.elapsedRealtime() + START_LEAD_TIME_MS
         surfaceReadyRoles.forEach { role ->
             sendSnapshot(role, session, initialStart = true)
@@ -508,6 +530,15 @@ class PidShareCoordinator @Inject constructor(
     private fun stopTargetInternal(role: String, reason: String, notifyReceiver: Boolean) {
         val session = activeSession ?: return
         if (role !in session.selectedRoles && role !in session.acceptedRoles) return
+        notifyHost(
+            session = session,
+            type = if (session.phase == SharePhase.SHARING) {
+                HostShareNotificationType.CANCELLED
+            } else {
+                HostShareNotificationType.DENIED
+            },
+            role = role
+        )
         session.selectedRoles.remove(role)
         session.acceptedRoles.remove(role)
         session.surfaceReadyRoles.remove(role)
@@ -522,20 +553,14 @@ class PidShareCoordinator @Inject constructor(
         if (session.selectedRoles.isEmpty()) {
             finishSharingSession(
                 reason = reason,
-                notifyReceivers = false,
-                notification = if (session.phase == SharePhase.SHARING) {
-                    HostShareNotification.ENDED
-                } else {
-                    HostShareNotification.DENIED
-                }
+                notifyReceivers = false
             )
         }
     }
 
     private fun finishSharingSession(
         reason: String,
-        notifyReceivers: Boolean,
-        notification: HostShareNotification?
+        notifyReceivers: Boolean
     ) {
         val session = activeSession ?: return
         activeSession = null
@@ -562,7 +587,6 @@ class PidShareCoordinator @Inject constructor(
         if (session.phase != SharePhase.SHARING && session.wasPlaying) {
             playbackController.exoPlayer.play()
         }
-        notification?.let(_hostNotifications::tryEmit)
         Log.i(TAG, "Share session finished phase=${session.phase} reason=$reason")
     }
 
@@ -587,6 +611,16 @@ class PidShareCoordinator @Inject constructor(
         }
         renderFanout.removeRearOutput(role)
         val session = activeSession ?: return
+        if (role !in session.selectedRoles && role !in session.acceptedRoles) return
+        notifyHost(
+            session = session,
+            type = if (session.phase == SharePhase.SHARING) {
+                HostShareNotificationType.CANCELLED
+            } else {
+                HostShareNotificationType.DENIED
+            },
+            role = role
+        )
         session.surfaceRecoveryJobs.remove(role)?.cancel()
         session.surfaceGenerations.remove(role)
         session.surfaceReadyRoles.remove(role)
@@ -596,12 +630,7 @@ class PidShareCoordinator @Inject constructor(
         if (session.selectedRoles.isEmpty()) {
             finishSharingSession(
                 reason = "Rear app disconnected",
-                notifyReceivers = false,
-                notification = if (session.phase == SharePhase.SHARING) {
-                    HostShareNotification.ENDED
-                } else {
-                    HostShareNotification.DENIED
-                }
+                notifyReceivers = false
             )
         }
     }
@@ -680,6 +709,20 @@ class PidShareCoordinator @Inject constructor(
         }
     }
 
+    private fun notifyHost(
+        session: ActiveSession,
+        type: HostShareNotificationType,
+        role: String
+    ) {
+        _hostNotifications.tryEmit(
+            HostShareNotification.forResponse(
+                type = type,
+                role = role,
+                requestedTargetCount = session.requestedRoles.size
+            )
+        )
+    }
+
     private inline fun sendTo(role: String, block: (IRearPlaybackReceiver) -> Unit) {
         val receiver = receivers[role]?.receiver ?: return
         try {
@@ -724,7 +767,8 @@ class PidShareCoordinator @Inject constructor(
 
     private data class ActiveSession(
         val sessionId: String,
-        val source: VideoSource.Asset,
+        var source: VideoSource.Asset,
+        val requestedRoles: Set<String>,
         val selectedRoles: MutableSet<String>,
         val anchorPositionMs: Long,
         val wasPlaying: Boolean,
@@ -755,10 +799,4 @@ class PidShareCoordinator @Inject constructor(
         const val START_LEAD_TIME_MS = 700L
         const val RECONCILIATION_INTERVAL_MS = 2_000L
     }
-}
-
-enum class HostShareNotification(val message: String) {
-    ACCEPTED("Video broadcast accepted"),
-    DENIED("Video broadcast denied"),
-    ENDED("Video broadcast ended")
 }

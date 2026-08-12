@@ -64,6 +64,13 @@ class FrontPlayerActivity : ComponentActivity() {
                 }
             }
         }
+        lifecycleScope.launch {
+            playbackController.playbackCompleted.collect {
+                if (shareClient.sharedSession.value == null && !isFinishing && !isDestroyed) {
+                    showNextVideo()
+                }
+            }
+        }
         setContent {
             CoWatchTheme {
                 val shared by shareClient.sharedSession.collectAsStateWithLifecycle()
@@ -121,8 +128,6 @@ class FrontPlayerActivity : ComponentActivity() {
                                 positionMs = snapshot.currentPositionAt(nowMs),
                                 durationMs = snapshot.durationMs,
                                 title = snapshot.title,
-                                isPlaying = snapshot.isPlaying,
-                                playbackSpeed = snapshot.playbackSpeed,
                                 modifier = Modifier.fillMaxSize()
                             )
                         } else {
@@ -196,16 +201,21 @@ class FrontPlayerActivity : ComponentActivity() {
     }
 
     private fun showPreviousVideo() {
-        videoCatalogNavigator.previous(playbackController.currentSource)?.let(::showLocalVideo)
+        videoCatalogNavigator.previous(playbackController.currentSource)?.let(::continueLocalPlayback)
     }
 
     private fun showNextVideo() {
-        videoCatalogNavigator.next(playbackController.currentSource)?.let(::showLocalVideo)
+        videoCatalogNavigator.next(playbackController.currentSource)?.let(::continueLocalPlayback)
     }
 
     private fun showLocalVideo(source: VideoSource.Asset) {
         playbackController.setSharedMode(false)
         playbackController.showFullscreen(source)
+    }
+
+    private fun continueLocalPlayback(source: VideoSource.Asset) {
+        playbackController.setSharedMode(false)
+        playbackController.continuePlayback(source)
     }
 
     private fun closePlayer() {

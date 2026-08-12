@@ -1,6 +1,6 @@
 # CoWatch Four-APK Flavor Architecture
 
-Last updated: 2026-07-26
+Last updated: 2026-08-12
 
 This report describes the current source tree. Source code is the authority when an older design note conflicts with this document.
 
@@ -172,8 +172,10 @@ Remote Binder surfaces are owned and released by the PID renderer when removed. 
 
 ### Shared Rear overlay
 
-- The Rear shared overlay uses the same title, timeline, transport geometry and background as PID.
-- Transport buttons are permanently rendered with pressed artwork and are disabled.
+- The Rear shared overlay uses the same title, full-width timeline geometry and control-bar
+  background as PID.
+- Transport buttons are not rendered while a Rear is receiving PID fanout. The shared screen is
+  read-only and exposes no local playback action.
 - A Rear screen tap changes only that screen's overlay visibility.
 - Each Rear screen owns an independent five-second auto-hide timer.
 - Progress advances only when the PID snapshot reports `isPlaying=true`.
@@ -188,9 +190,22 @@ Remote Binder surfaces are owned and released by the PID renderer when removed. 
 ### In-app PiP
 
 - CID, PID and Rear reuse the same PiP chrome and icon-only controls.
+- PiP controls start visible, fade out after five seconds, and reappear when that PiP surface is
+  tapped. A control action restarts the same five-second timer.
 - CID and Rear switch the player between `PlayerView` surfaces.
 - PID attaches/removes a dedicated fanout output by Surface generation.
 - Returning to fullscreen for the same source preserves decoder, playback position and state.
+
+### Playlist continuation
+
+- Natural completion advances to the next catalog video in CID, PID and standalone Rear playback.
+- Previous/next and natural completion replace the current media item without changing the current
+  fullscreen/PiP destination.
+- PID media replacement does not end an active broadcast session. The coordinator keeps the same
+  session and Rear outputs, updates the shared source, increments the seek event and publishes the
+  new snapshots.
+- A broadcast session ends only through an explicit session-ending path such as PID player close,
+  Broadcast off, Rear departure, target failure or PID/service loss.
 
 ## 7. Seek-frame generation and lookup
 
@@ -219,6 +234,19 @@ The current protocol version is `4`.
   not validate the supplied `sessionId` before stopping that role, so it is not covered by this
   guarantee.
 - Binder death handling checks Binder identity so an old callback cannot remove a newer receiver registration.
+- Registration/protocol rejection uses a blank-session stop callback only as a connection-level
+  rejection. Rear ignores that callback for playback teardown unless an actual shared session is
+  active, so standalone playback is never suspended by an invalid display registration.
+
+### PID host broadcast notifications
+
+- PID emits `Video broadcast accepted`, `Video broadcast denied` and
+  `Video broadcast cancelled` for the affected target response.
+- A request sent to one Rear uses the base message without a seat suffix.
+- A request sent to both Rear targets emits a separate notification per response with
+  ` - Rear Left` or ` - Rear Right` appended.
+- Notification events are queued and displayed for two seconds each; one target response cannot
+  overwrite the other target's pending notification.
 
 ### Receiver consent ownership and dismissal
 
@@ -305,7 +333,9 @@ flowchart TD
     T --> U{"Another shared Rear remains?"}
     U -- "Yes" --> R
     U -- "No" --> Z2["End active session; Rear restores its saved local destination"]
-    S -- "PID Broadcast off, player close, or media replacement" --> Z2
+    S -- "PID next, previous, or natural completion" --> V["Keep session and outputs;<br/>replace source and publish snapshots"]
+    V --> R
+    S -- "PID Broadcast off or player close" --> Z2
     S -- "PID service/process disconnect" --> Z3["Rear clears shared mode and restores local playback"]
 ```
 
@@ -345,6 +375,8 @@ One idempotent PID completion path is used for denial, timeout, target departure
   Activity next supplies/refreshes the display.
 - Explicit Dismiss from a PID-launched bootstrap consent Activity also removes the temporary Rear
   registration and process. Dismiss from an already-running Rear UI preserves its standalone state.
+- A PID rejection with no active shared session updates receiver availability only. It does not run
+  Rear's local suspend/restore path or change its active `PlayerView` surface.
 
 ## 10. Hilt composition
 
@@ -393,7 +425,7 @@ not a current runtime capability.
 
 ## 13. Verification status
 
-Source/static verification represented by this report on 2026-07-26:
+Verification represented by this report on 2026-08-12:
 
 - `settings.gradle.kts` includes only `:app`.
 - Four application flavors and their package suffixes are present.
@@ -401,8 +433,17 @@ Source/static verification represented by this report on 2026-07-26:
 - Seven video assets and seven corresponding seek-preview directories are present.
 - AIDL protocol, signature permission, fanout renderer, fixed Rear mapping (`2` / `3`) and
   cold-launch helper are wired in current source.
-- No compilation, APK assembly, installation or automated test was run for this review. A prior
-  compile result must not be treated as verification of the current live worktree.
+- `compileRearLeftDebugKotlin` and `compileRearRightDebugKotlin` pass for the current source.
+- `testRearLeftDebugUnitTest` and `testRearRightDebugUnitTest` pass. The Rear variants currently
+  contain no flavor-specific JVM test source, while shared tests execute through their variants.
+- `installRearLeftDebug` and `installRearRightDebug` succeed on the Android 15 Automotive emulator.
+- With PID enabled and each Rear intentionally launched on the emulator's non-mapped display, PID
+  rejects registration but standalone video remains visible and playing. SurfaceFlinger frame
+  counters advanced from `77` to `133` for Rear Left and `78` to `133` for Rear Right over the
+  observed interval, covering the former black-video/progress-only failure.
+- These verification commands excluded `generateSeekPreviews` because FFmpeg is unavailable in the
+  current workspace. Existing preview assets were used; the complete FFmpeg-dependent pre-build was
+  not verified in this run.
 - Basic playback-control functions on all APKs are user-reported device-PASS baseline evidence;
   they are not re-verified by this source review.
 
@@ -419,6 +460,6 @@ Full remaining real-device coverage is defined in `COWATCH_REAL_DEVICE_MANUAL_TE
 - The bootstrap cleanup is attached to the explicit user Dismiss callback. A host-side timeout or
   cancellation that only clears the pending request finishes `ReceiverConsentActivity` through its
   state observer but does not execute the same unregister/unbind/process-termination sequence.
-- Renderer correctness, one-decoder behavior, cross-display launch permission, black-frame
-  recovery and synchronization timing remain real-device assertions. They cannot be proven by
-  this report or source inspection alone.
+- Renderer correctness, one-decoder behavior, cross-display launch permission and synchronization
+  timing remain real-device assertions. The emulator regression test above covers standalone Rear
+  rendering after registration rejection, not full multi-display fanout acceptance.

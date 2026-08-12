@@ -11,9 +11,10 @@ class PlayerViewModel @Inject constructor(
     private val playbackController: PlaybackController
 ) : ViewModel() {
     val playbackState = playbackController.playbackState
-    val playbackEnded = playbackController.playbackEnded
+    val playbackCompleted = playbackController.playbackCompleted
 
     fun show(source: VideoSource.Asset) = playbackController.showFullscreen(source)
+    fun continuePlayback(source: VideoSource.Asset) = playbackController.continuePlayback(source)
     fun enterInAppPip() = playbackController.enterInAppPip()
     fun exitInAppPip() = playbackController.exitInAppPip()
     fun close() = playbackController.stop()

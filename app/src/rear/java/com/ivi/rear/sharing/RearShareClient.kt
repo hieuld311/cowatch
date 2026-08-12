@@ -76,7 +76,10 @@ class RearShareClient @Inject constructor(
                 if (_pendingShareRequest.value?.snapshot?.sessionId == sessionId || sessionId.isBlank()) {
                     clearPendingRequest()
                 }
-                if (_sharedSession.value?.sessionId == sessionId || sessionId.isBlank()) {
+                val activeSessionId = _sharedSession.value?.sessionId
+                if (activeSessionId != null &&
+                    (activeSessionId == sessionId || sessionId.isBlank())
+                ) {
                     leaveSharedMode(reason, notifyHost = false)
                 }
             }

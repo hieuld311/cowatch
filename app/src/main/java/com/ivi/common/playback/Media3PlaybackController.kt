@@ -63,11 +63,11 @@ class Media3PlaybackController @Inject constructor(
     private var sharedMode = false
     private val _pipState = MutableStateFlow<InAppPipState?>(null)
     private val _playbackState = MutableStateFlow(SessionPlaybackState())
-    private val _playbackEnded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    private val _playbackCompleted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
 
     override val pipState: StateFlow<InAppPipState?> = _pipState.asStateFlow()
     override val playbackState: StateFlow<SessionPlaybackState> = _playbackState.asStateFlow()
-    override val playbackEnded: SharedFlow<Unit> = _playbackEnded
+    override val playbackCompleted: SharedFlow<Unit> = _playbackCompleted
     var currentSource: VideoSource.Asset? = null
         private set
 
@@ -127,6 +127,13 @@ class Media3PlaybackController @Inject constructor(
         startSource(source)
     }
 
+    /** Changes media without changing whether the player is fullscreen or in app-scoped PiP. */
+    override fun continuePlayback(source: VideoSource.Asset) {
+        val keepPip = _pipState.value != null
+        startSource(source)
+        if (keepPip) _pipState.value = InAppPipState(source)
+    }
+
     private fun startSource(source: VideoSource.Asset) {
         val player = getOrCreatePlayer()
         currentSource = source
@@ -178,7 +185,7 @@ class Media3PlaybackController @Inject constructor(
                 else -> LocalPlaybackDestination.FULLSCREEN
             }
         )
-        stopPlaybackInternal(notifyEnded = false)
+        stopPlaybackInternal()
         return snapshot
     }
 
@@ -186,7 +193,7 @@ class Media3PlaybackController @Inject constructor(
         sharedMode = false
         val source = snapshot.source
         if (source == null) {
-            stopPlaybackInternal(notifyEnded = false)
+            stopPlaybackInternal()
             return snapshot.destination
         }
 
@@ -207,6 +214,12 @@ class Media3PlaybackController @Inject constructor(
     }
 
     private val sessionPlayerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(playbackState: Int) {
+            if (playbackState == Player.STATE_ENDED) {
+                _playbackCompleted.tryEmit(Unit)
+            }
+        }
+
         override fun onEvents(player: Player, events: Player.Events) {
             publishPlaybackState()
         }
@@ -259,10 +272,10 @@ class Media3PlaybackController @Inject constructor(
 
     // Stop releases active media/codec resources but keeps one stable process-level player/session.
     override fun stop() {
-        stopPlaybackInternal(notifyEnded = true)
+        stopPlaybackInternal()
     }
 
-    private fun stopPlaybackInternal(notifyEnded: Boolean) {
+    private fun stopPlaybackInternal() {
         artworkJob?.cancel()
         artworkJob = null
         activePlayerView?.player = null
@@ -278,11 +291,10 @@ class Media3PlaybackController @Inject constructor(
         currentSource = null
         _playbackState.value = SessionPlaybackState()
         _pipState.value = null
-        if (notifyEnded) _playbackEnded.tryEmit(Unit)
     }
 
     fun releaseProcessResources() {
-        stopPlaybackInternal(notifyEnded = false)
+        stopPlaybackInternal()
         artworkScope.cancel()
         sessionPlayer?.clearVideoSurface()
         externalVideoSurface = null

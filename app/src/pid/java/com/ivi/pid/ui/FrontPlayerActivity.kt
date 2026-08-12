@@ -27,9 +27,8 @@ import com.ivi.pid.rendering.PidRenderFanout
 import com.ivi.pid.viewmodel.FrontPlayerViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -44,7 +43,6 @@ class FrontPlayerActivity : ComponentActivity() {
     private val activeAssetPath = mutableStateOf<String?>(null)
     private val hostNotificationText = mutableStateOf<String?>(null)
     private var resumeAfterShareDialog = false
-    private var hostNotificationJob: Job? = null
     private var audioFallbackApplied = false
     private lateinit var observedPlayer: Player
 
@@ -63,6 +61,7 @@ class FrontPlayerActivity : ComponentActivity() {
         observedPlayer.addListener(playerListener)
         show(source)
         observeHostNotifications()
+        observePlaybackCompletion()
         window.enterImmersiveFullscreen()
 
         setContent {
@@ -108,20 +107,31 @@ class FrontPlayerActivity : ComponentActivity() {
     }
 
     private fun show(source: VideoSource.Asset) {
+        playSource(source, continueCurrentDestination = false)
+    }
+
+    private fun continuePlayback(source: VideoSource.Asset) {
+        playSource(source, continueCurrentDestination = true)
+    }
+
+    private fun playSource(source: VideoSource.Asset, continueCurrentDestination: Boolean) {
         val sourceChanged = playbackController.currentSource?.assetPath != source.assetPath
         if (sourceChanged) {
-            viewModel.shareCoordinator.stopSharingAll("PID selected different media")
+            viewModel.shareCoordinator.prepareMediaChange(source)
         }
         renderFanout.prepareForPlayback(sourceChanged)
         activeAssetPath.value = source.assetPath
         audioFallbackApplied = false
-        playbackController.showFullscreen(source)
+        if (continueCurrentDestination) {
+            playbackController.continuePlayback(source)
+        } else {
+            playbackController.showFullscreen(source)
+        }
     }
 
     private fun onBroadcastCheckedChange(checked: Boolean) {
         if (!checked) {
-            showShareDialog.value = false
-            viewModel.shareCoordinator.stopSharingAll()
+            if (!viewModel.sessionActive.value) dismissShareDialog()
             return
         }
         viewModel.shareCoordinator.refreshTargets(currentDisplayId())
@@ -155,15 +165,20 @@ class FrontPlayerActivity : ComponentActivity() {
 
     private fun observeHostNotifications() {
         lifecycleScope.launch {
-            viewModel.hostNotifications.collectLatest { notification ->
-                hostNotificationJob?.cancel()
+            viewModel.hostNotifications.collect { notification ->
                 hostNotificationText.value = notification.message
-                hostNotificationJob = launch {
-                    delay(HOST_NOTIFICATION_DURATION_MS)
-                    if (hostNotificationText.value == notification.message) {
-                        hostNotificationText.value = null
-                    }
+                delay(HOST_NOTIFICATION_DURATION_MS)
+                if (hostNotificationText.value == notification.message) {
+                    hostNotificationText.value = null
                 }
+            }
+        }
+    }
+
+    private fun observePlaybackCompletion() {
+        lifecycleScope.launch {
+            playbackController.playbackCompleted.collect {
+                if (!isFinishing && !isDestroyed) showNextVideo()
             }
         }
     }
@@ -177,11 +192,11 @@ class FrontPlayerActivity : ComponentActivity() {
     }
 
     private fun showPreviousVideo() {
-        videoCatalogNavigator.previous(playbackController.currentSource)?.let(::show)
+        videoCatalogNavigator.previous(playbackController.currentSource)?.let(::continuePlayback)
     }
 
     private fun showNextVideo() {
-        videoCatalogNavigator.next(playbackController.currentSource)?.let(::show)
+        videoCatalogNavigator.next(playbackController.currentSource)?.let(::continuePlayback)
     }
 
     private fun closePlayer() {
@@ -211,7 +226,6 @@ class FrontPlayerActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        hostNotificationJob?.cancel()
         if (::observedPlayer.isInitialized) observedPlayer.removeListener(playerListener)
         super.onDestroy()
     }

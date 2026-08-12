@@ -1,5 +1,6 @@
 package com.ivi.common.ui.player
 
+import androidx.annotation.OptIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -11,10 +12,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
 import com.ivi.common.playback.normalizedDurationMs
 import com.ivi.common.playback.safeCurrentPositionMs
 import com.ivi.common.playback.togglePlayback
 import com.ivi.common.playback.resolveDisplayTitle
+import kotlin.math.roundToLong
 
 @Composable
 public fun rememberPlaybackControlsState(player: Player): PlaybackControlsState {
@@ -22,6 +26,7 @@ public fun rememberPlaybackControlsState(player: Player): PlaybackControlsState 
 }
 
 @Stable
+@OptIn(UnstableApi::class)
 public class PlaybackControlsState(
     private val player: Player
 ) {
@@ -41,8 +46,6 @@ public class PlaybackControlsState(
         private set
     var isFastForwarding by mutableStateOf(false)
         private set
-    var rewindRenderedFrameVersion by mutableIntStateOf(0)
-        private set
     var controlsVisible by mutableStateOf(true)
         private set
     var interactionVersion by mutableIntStateOf(0)
@@ -50,6 +53,8 @@ public class PlaybackControlsState(
     private var resumePlaybackAfterSeek = false
     private var playbackParametersBeforeTransportHold = PlaybackParameters.DEFAULT
     private var resumePlaybackAfterTransportHold = false
+    private var rewindTargetPositionMs = 0L
+    private var rewindUiPositionMs = 0.0
 
     val speedOption: PlaybackSpeedOption
         get() = playbackSpeedOption(playbackSpeed)
@@ -60,7 +65,7 @@ public class PlaybackControlsState(
         videoTitle = player.resolveDisplayTitle()
         playbackSpeed = player.playbackParameters.speed
 
-        if (updateSlider && !isDragging) {
+        if (updateSlider && !isDragging && !isRewinding) {
             sliderPositionMs = player.safeCurrentPositionMs
         }
     }
@@ -78,6 +83,7 @@ public class PlaybackControlsState(
     }
 
     fun updatePlaybackPosition() {
+        if (isRewinding) return
         sliderPositionMs = player.safeCurrentPositionMs
     }
 
@@ -117,22 +123,27 @@ public class PlaybackControlsState(
         prepareTransportHold()
         isRewinding = true
         player.pause()
+        rewindTargetPositionMs = player.safeCurrentPositionMs
+        rewindUiPositionMs = rewindTargetPositionMs.toDouble()
+        sliderPositionMs = rewindUiPositionMs.roundToLong()
+        (player as? ExoPlayer)?.setScrubbingModeEnabled(true)
+    }
+
+    fun advanceRewindPosition(frameDeltaNanos: Long) {
+        if (!isRewinding || frameDeltaNanos <= 0L) return
+        val rewindDeltaMs = frameDeltaNanos / NANOS_PER_MILLISECOND * TRANSPORT_HOLD_SPEED
+        rewindUiPositionMs = (rewindUiPositionMs - rewindDeltaMs).coerceAtLeast(0.0)
+        sliderPositionMs = rewindUiPositionMs.roundToLong()
     }
 
     fun rewindStep(): Boolean {
         if (!isRewinding) return false
-        // Media3 has no reverse renderer. Timed seeks simulate reverse at the configured speed.
-        val rewindStepMs = (TRANSPORT_HOLD_TICK_DELAY_MS * TRANSPORT_HOLD_SPEED).toLong()
-        val positionMs = player.safeCurrentPositionMs
-        val target = (positionMs - rewindStepMs).coerceAtLeast(0L)
-        if (target == positionMs) return false
+        // The UI playhead runs at display refresh rate; decoder work remains throttled.
+        val target = sliderPositionMs
+        if (target == rewindTargetPositionMs) return false
+        rewindTargetPositionMs = target
         player.seekTo(target)
-        sliderPositionMs = target
         return true
-    }
-
-    fun onRenderedFirstFrame() {
-        if (isRewinding) rewindRenderedFrameVersion += 1
     }
 
     fun endRewind() = endTransportHold()
@@ -160,6 +171,10 @@ public class PlaybackControlsState(
 
     private fun endTransportHold() {
         if (!isRewinding && !isFastForwarding) return
+        if (isRewinding) {
+            player.seekTo(sliderPositionMs)
+            (player as? ExoPlayer)?.setScrubbingModeEnabled(false)
+        }
         isRewinding = false
         isFastForwarding = false
         player.playbackParameters = playbackParametersBeforeTransportHold
@@ -175,5 +190,6 @@ public class PlaybackControlsState(
     companion object {
         const val TRANSPORT_HOLD_SPEED = 2f
         const val TRANSPORT_HOLD_TICK_DELAY_MS = 100L
+        private const val NANOS_PER_MILLISECOND = 1_000_000.0
     }
 }

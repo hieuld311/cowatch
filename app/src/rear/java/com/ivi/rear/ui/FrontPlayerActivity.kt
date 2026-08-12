@@ -78,10 +78,11 @@ class FrontPlayerActivity : ComponentActivity() {
                     withFrameNanos { }
                     display?.displayId?.let(shareClient::markReceiverUiReady)
                 }
-                LaunchedEffect(shared?.sessionId, shared?.sequence) {
-                    while (shared != null) {
+                LaunchedEffect(shared?.sessionId, shared?.sequence, controlsVisible) {
+                    if (!controlsVisible) return@LaunchedEffect
+                    while (shared != null && controlsVisible) {
+                        withFrameNanos { }
                         nowMs = SystemClock.elapsedRealtime()
-                        delay(REMOTE_POSITION_UPDATE_DELAY_MS)
                     }
                 }
                 LaunchedEffect(shared?.sessionId, interactionVersion) {
@@ -218,7 +219,6 @@ class FrontPlayerActivity : ComponentActivity() {
 
     companion object {
         const val EXTRA_SHARED_MODE = "com.ivi.rear.extra.SHARED_MODE"
-        private const val REMOTE_POSITION_UPDATE_DELAY_MS = 100L
         private const val CONTROLS_AUTO_HIDE_DELAY_MS = 5_000L
     }
 }

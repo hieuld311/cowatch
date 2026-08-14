@@ -112,42 +112,60 @@ class AssetVideoRepository @Inject constructor(
 
     private fun queryVolumeVideos(volumeName: String): List<AssetVideo> {
         val collection = MediaStore.Video.Media.getContentUri(volumeName)
-        return runCatching {
-            context.contentResolver.query(
-                collection,
-                VIDEO_PROJECTION,
-                null,
-                null,
-                "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
-            )?.use { cursor ->
-                Log.i(TAG, "MediaStore query: volume=$volumeName, uri=$collection, rows=${cursor.count}")
-                val idIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
-                val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
-                buildList {
-                    while (cursor.moveToNext()) {
-                        val fileName = cursor.getString(nameIndex) ?: continue
-                        if (!MediaFileTypes.isSupportedVideoFileName(fileName)) continue
-                        val contentUri = ContentUris.withAppendedId(
-                            collection,
-                            cursor.getLong(idIndex)
-                        )
-                        Log.i(TAG, "Accepted video: name=$fileName, uri=$contentUri")
-                        add(
-                            AssetVideo(
-                                assetPath = contentUri.toString(),
-                                fileName = fileName,
-                                title = fileName.substringBeforeLast('.').toVideoTitle(),
-                                isPackagedAsset = false
+        repeat(VOLUME_QUERY_ATTEMPTS) { attempt ->
+            val result = runCatching {
+                context.contentResolver.query(
+                    collection,
+                    VIDEO_PROJECTION,
+                    null,
+                    null,
+                    "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+                )?.use { cursor ->
+                    Log.i(TAG, "MediaStore query: volume=$volumeName, uri=$collection, rows=${cursor.count}")
+                    val idIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+                    val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+                    buildList {
+                        while (cursor.moveToNext()) {
+                            val fileName = cursor.getString(nameIndex) ?: continue
+                            if (!MediaFileTypes.isSupportedVideoFileName(fileName)) continue
+                            val contentUri = ContentUris.withAppendedId(
+                                collection,
+                                cursor.getLong(idIndex)
                             )
-                        )
+                            Log.i(TAG, "Accepted video: name=$fileName, uri=$contentUri")
+                            add(
+                                AssetVideo(
+                                    assetPath = contentUri.toString(),
+                                    fileName = fileName,
+                                    title = fileName.substringBeforeLast('.').toVideoTitle(),
+                                    isPackagedAsset = false
+                                )
+                            )
+                        }
                     }
+                } ?: emptyList<AssetVideo>().also {
+                    Log.w(TAG, "MediaStore query returned null cursor: volume=$volumeName, uri=$collection")
                 }
-            } ?: emptyList<AssetVideo>().also {
-                Log.w(TAG, "MediaStore query returned null cursor: volume=$volumeName, uri=$collection")
+            }.onFailure { error ->
+                Log.e(
+                    TAG,
+                    "MediaStore query failed (attempt ${attempt + 1}/$VOLUME_QUERY_ATTEMPTS): " +
+                        "volume=$volumeName, uri=$collection",
+                    error
+                )
             }
-        }.onFailure { error ->
-            Log.e(TAG, "MediaStore query failed: volume=$volumeName, uri=$collection", error)
-        }.getOrDefault(emptyList())
+            if (result.isSuccess) return result.getOrThrow()
+
+            // MediaStore.getExternalVolumeNames() can report a volume a moment before MediaProvider
+            // finishes registering it, so the immediate query throws IllegalArgumentException("Volume
+            // not found"). That registration race is the only case worth a short retry; any other
+            // failure is returned as empty immediately.
+            val isVolumeRegistrationRace = result.exceptionOrNull() is IllegalArgumentException
+            val hasAttemptsLeft = attempt < VOLUME_QUERY_ATTEMPTS - 1
+            if (!isVolumeRegistrationRace || !hasAttemptsLeft) return emptyList()
+            Thread.sleep(VOLUME_QUERY_RETRY_DELAY_MS)
+        }
+        return emptyList()
     }
 
     // Recursively scan only the video catalog folder so unrelated assets never appear in the library.
@@ -186,6 +204,8 @@ class AssetVideoRepository @Inject constructor(
     private companion object {
         const val TAG = "CoWatchVideoCatalog"
         const val VIDEO_ASSET_ROOT = "fileVideoSample"
+        const val VOLUME_QUERY_ATTEMPTS = 2
+        const val VOLUME_QUERY_RETRY_DELAY_MS = 400L
         val VIDEO_PROJECTION = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME

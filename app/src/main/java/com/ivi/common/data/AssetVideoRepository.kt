@@ -1,21 +1,17 @@
 package com.ivi.common.data
 
-import android.content.Context
-import android.content.ContentUris
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
-import android.database.ContentObserver
+import android.net.Uri
 import android.os.Build
-import android.os.Handler
-import android.os.Looper
-import android.os.Process
 import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
-import android.provider.MediaStore
 import android.util.Log
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.domain.VideoCatalogRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
@@ -41,27 +37,18 @@ class AssetVideoRepository @Inject constructor(
 
         refreshCatalog()
         val storageManager = context.getSystemService(StorageManager::class.java)
+        // Removable-volume mount/eject is the only refresh signal we need: the catalog is now
+        // read directly off the filesystem, not off MediaStore, so there is no indexing delay to
+        // wait out and no MediaStore change event to observe.
         val callback = object : StorageManager.StorageVolumeCallback() {
             override fun onStateChanged(volume: StorageVolume) {
-                Log.i(TAG, "Storage changed; refreshing catalog")
-                refreshCatalog()
-            }
-        }
-        val mediaObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) {
-                Log.i(TAG, "MediaStore changed: selfChange=$selfChange; refreshing catalog")
+                Log.i(TAG, "Storage changed: state=${volume.state}; refreshing catalog")
                 refreshCatalog()
             }
         }
         storageManager.registerStorageVolumeCallback(context.mainExecutor, callback)
-        context.contentResolver.registerContentObserver(
-            MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL),
-            true,
-            mediaObserver
-        )
         awaitClose {
             storageManager.unregisterStorageVolumeCallback(callback)
-            context.contentResolver.unregisterContentObserver(mediaObserver)
         }
     }
 
@@ -87,7 +74,13 @@ class AssetVideoRepository @Inject constructor(
             .mapNotNull { assetPath -> assetPath.toAssetVideo(isPackagedAsset = true) }
     }
 
-    /** Reads indexed videos from primary storage and every mounted USB/SD media volume. */
+    /**
+     * Reads every mounted USB/SD volume directly off the filesystem rather than through MediaStore.
+     * On this hardware MediaStore never indexes a freshly mounted removable volume — even an
+     * explicit MediaScannerConnection.scanFile() request left MediaStore's row count at zero for a
+     * file that is genuinely present — so any MediaStore-backed query silently returns nothing. A
+     * direct File walk has no such dependency on the platform's indexing state.
+     */
     private fun scanExternalVideos(): List<AssetVideo> {
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_VIDEO
@@ -95,55 +88,40 @@ class AssetVideoRepository @Inject constructor(
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
         val permissionGranted = context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED
-        Log.i(TAG, "Scan: user=${Process.myUserHandle()}, permissionGranted=$permissionGranted")
-        return queryExternalVideos()
+        Log.i(TAG, "Scan: permissionGranted=$permissionGranted")
+
+        val storageManager = context.getSystemService(StorageManager::class.java)
+        val removableVolumes = storageManager.storageVolumes.filter { it.isRemovable && !it.isPrimary }
+        return removableVolumes.flatMap { volume ->
+            val directory = volume.directory
+            if (directory == null) {
+                Log.w(TAG, "Skipping volume with no directory: name=${volume.mediaStoreVolumeName}")
+                return@flatMap emptyList()
+            }
+            scanDirectoryForVideos(directory, volumeName = volume.mediaStoreVolumeName)
+        }
     }
 
-    // Queries the aggregate "external" volume instead of looping MediaStore.getExternalVolumeNames()
-    // and querying each volume's own content URI. MediaProvider can report a just-mounted USB volume
-    // (e.g. "6258-30d4") as mounted while never attaching that volume's own content://media/<name>/...
-    // authority on some builds, so per-volume queries throw IllegalArgumentException("Volume not
-    // found") permanently, not just as a brief startup race. content://media/external/video/media has
-    // always been queryable and covers every mounted external volume, primary and removable, at once.
-    private fun queryExternalVideos(): List<AssetVideo> {
-        val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
+    private fun scanDirectoryForVideos(root: File, volumeName: String?): List<AssetVideo> {
         return runCatching {
-            context.contentResolver.query(
-                collection,
-                VIDEO_PROJECTION,
-                null,
-                null,
-                "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
-            )?.use { cursor ->
-                Log.i(TAG, "MediaStore query: uri=$collection, rows=${cursor.count}")
-                val idIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
-                val nameIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
-                val volumeIndex = cursor.getColumnIndexOrThrow(MediaStore.MediaColumns.VOLUME_NAME)
-                buildList {
-                    while (cursor.moveToNext()) {
-                        val fileName = cursor.getString(nameIndex) ?: continue
-                        if (!MediaFileTypes.isSupportedVideoFileName(fileName)) continue
-                        val contentUri = ContentUris.withAppendedId(collection, cursor.getLong(idIndex))
-                        Log.i(
-                            TAG,
-                            "Accepted video: name=$fileName, volume=${cursor.getString(volumeIndex)}, uri=$contentUri"
-                        )
-                        add(
-                            AssetVideo(
-                                assetPath = contentUri.toString(),
-                                fileName = fileName,
-                                title = fileName.substringBeforeLast('.').toVideoTitle(),
-                                isPackagedAsset = false
-                            )
-                        )
-                    }
-                }
-            } ?: emptyList<AssetVideo>().also {
-                Log.w(TAG, "MediaStore query returned null cursor: uri=$collection")
-            }
+            root.walk()
+                .filter { file -> file.isFile && MediaFileTypes.isSupportedVideoFileName(file.name) }
+                .map { file -> file.toAssetVideo() }
+                .toList()
+        }.onSuccess { videos ->
+            Log.i(TAG, "Volume scan: volume=$volumeName, path=${root.path}, videos=${videos.size}")
         }.onFailure { error ->
-            Log.e(TAG, "MediaStore query failed: uri=$collection", error)
+            Log.e(TAG, "Volume scan failed: volume=$volumeName, path=${root.path}", error)
         }.getOrDefault(emptyList())
+    }
+
+    private fun File.toAssetVideo(): AssetVideo {
+        return AssetVideo(
+            assetPath = Uri.fromFile(this).toString(),
+            fileName = name,
+            title = name.substringBeforeLast('.').toVideoTitle(),
+            isPackagedAsset = false
+        )
     }
 
     // Recursively scan only the video catalog folder so unrelated assets never appear in the library.
@@ -177,15 +155,10 @@ class AssetVideoRepository @Inject constructor(
         return split('_').filter { it.isNotBlank() }.joinToString(" ") { part ->
             part.replaceFirstChar { char -> if (char.isLowerCase()) char.titlecase() else char.toString() }
         }
-}
+    }
 
     private companion object {
         const val TAG = "CoWatchVideoCatalog"
         const val VIDEO_ASSET_ROOT = "fileVideoSample"
-        val VIDEO_PROJECTION = arrayOf(
-            MediaStore.MediaColumns._ID,
-            MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.VOLUME_NAME
-        )
     }
 }

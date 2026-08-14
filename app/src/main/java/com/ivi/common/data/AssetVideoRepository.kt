@@ -132,7 +132,13 @@ class AssetVideoRepository @Inject constructor(
 
     private fun scanDirectoryForVideos(root: File, volumeName: String?): List<AssetVideo> {
         return runCatching {
-            root.walk()
+            root.walkTopDown()
+                // Deleting a file in Windows Explorer moves it into $RECYCLE.BIN rather than erasing
+                // it, and every desktop OS keeps similar hidden housekeeping folders (System Volume
+                // Information, .Trash, .Spotlight-V100, ...). A raw filesystem walk has no concept of
+                // "deleted", so it finds those files exactly like real ones unless we prune the
+                // folders before descending into them.
+                .onEnter { directory -> !directory.isHiddenOrSystemFolder() }
                 .filter { file -> file.isFile && MediaFileTypes.isSupportedVideoFileName(file.name) }
                 .onEach { file ->
                     Log.i(TAG, "Accepted video: volume=$volumeName, path=${file.absolutePath}, bytes=${file.length()}")
@@ -144,6 +150,10 @@ class AssetVideoRepository @Inject constructor(
         }.onFailure { error ->
             Log.e(TAG, "Volume scan failed: volume=$volumeName, path=${root.path}", error)
         }.getOrDefault(emptyList())
+    }
+
+    private fun File.isHiddenOrSystemFolder(): Boolean {
+        return name.startsWith('.') || name.startsWith('$') || name.equals("System Volume Information", ignoreCase = true)
     }
 
     private fun File.toAssetVideo(): AssetVideo {

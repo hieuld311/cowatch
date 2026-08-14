@@ -18,7 +18,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import android.util.Log
 import com.ivi.R
 import com.ivi.common.media.ThumbnailLoader
 import com.ivi.common.domain.AssetVideo
@@ -43,9 +42,6 @@ fun VideoLibraryScreen(
     onPipClose: () -> Unit,
     onFocusedVideoPlay: (AssetVideo) -> Unit
 ) {
-    // TEMP DIAGNOSTIC: runs on every recomposition of this composable, so this proves/disproves
-    // whether Compose is even re-entering this function when `videos` changes upstream.
-    Log.i("CoWatchLibraryUI", "VideoLibraryScreen recompose: videos=${videos.size}")
     var focusedIndex by remember(videos) { mutableIntStateOf(0) }
     var previewFocusedIndex by remember(videos) { mutableStateOf<Int?>(null) }
     val density = LocalDensity.current

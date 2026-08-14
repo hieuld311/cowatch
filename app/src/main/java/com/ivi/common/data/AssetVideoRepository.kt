@@ -20,10 +20,8 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.awaitClose
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -76,24 +74,9 @@ class AssetVideoRepository @Inject constructor(
             ContextCompat.RECEIVER_EXPORTED
         )
 
-        // Confirmed on-device: this build never sends ACTION_MEDIA_MOUNTED at all, and
-        // StorageVolumeCallback.onStateChanged is flaky — a sibling app's identical registration
-        // fired for a real USB mount while CoWatch's did not, in the same test run, on the same
-        // event. With both platform signals unreliable, polling is the only trigger guaranteed to
-        // eventually notice a change. It runs only while something is actively collecting this
-        // Flow (callbackFlow cancels its block on awaitClose), and a single-volume filesystem walk
-        // is cheap, so a few-second interval stays correct without meaningfully wasting work.
-        val pollingJob = launch(Dispatchers.IO) {
-            while (isActive) {
-                delay(POLL_INTERVAL_MS)
-                refreshCatalog()
-            }
-        }
-
         awaitClose {
             storageManager.unregisterStorageVolumeCallback(volumeCallback)
             context.unregisterReceiver(mediaMountReceiver)
-            pollingJob.cancel()
         }
     }
 
@@ -217,7 +200,6 @@ class AssetVideoRepository @Inject constructor(
 
     private companion object {
         const val TAG = "CoWatchVideoCatalog"
-        const val POLL_INTERVAL_MS = 4_000L
         const val VIDEO_ASSET_ROOT = "fileVideoSample"
     }
 }

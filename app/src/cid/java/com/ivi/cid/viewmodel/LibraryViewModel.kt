@@ -1,5 +1,6 @@
 package com.ivi.cid.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ivi.common.domain.AssetVideo
@@ -27,6 +28,8 @@ class LibraryViewModel @Inject constructor(
         playbackController.pipState,
         playbackController.playbackState
     ) { catalog, pipState, playbackState ->
+        // TEMP DIAGNOSTIC: confirms whether combine() re-runs when `videos` changes.
+        Log.i(TAG, "uiState combine: videos=${catalog.size}")
         LibraryUiState(
             videos = catalog,
             pipState = pipState,
@@ -42,11 +45,15 @@ class LibraryViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             videoCatalogRepository.observeVideos().collect { catalog ->
+                // TEMP DIAGNOSTIC: confirms whether this collector is still alive and how big each
+                // emitted catalog is, so a stalled collector is distinguishable from a stalled UI.
+                Log.i(TAG, "observeVideos collected: videos=${catalog.size}")
                 val source = playbackController.playbackState.value.activeSource
                 if (source != null && !source.isPackagedAsset && catalog.none { it.assetPath == source.assetPath }) {
                     playbackController.stop()
                 }
                 videos.value = catalog
+                Log.i(TAG, "videos.value set: videos=${videos.value.size}")
             }
         }
     }
@@ -57,6 +64,7 @@ class LibraryViewModel @Inject constructor(
     fun closePipPlayback() = playbackController.stop()
 
     private companion object {
+        const val TAG = "CoWatchLibraryVM"
         const val STOP_TIMEOUT_MS = 5_000L
     }
 }

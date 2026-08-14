@@ -134,6 +134,9 @@ class AssetVideoRepository @Inject constructor(
         return runCatching {
             root.walk()
                 .filter { file -> file.isFile && MediaFileTypes.isSupportedVideoFileName(file.name) }
+                .onEach { file ->
+                    Log.i(TAG, "Accepted video: volume=$volumeName, path=${file.absolutePath}, bytes=${file.length()}")
+                }
                 .map { file -> file.toAssetVideo() }
                 .toList()
         }.onSuccess { videos ->

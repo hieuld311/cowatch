@@ -1,13 +1,17 @@
 package com.ivi.common.data
 
 import android.Manifest
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
 import android.util.Log
+import androidx.core.content.ContextCompat
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.domain.VideoCatalogRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -37,18 +41,42 @@ class AssetVideoRepository @Inject constructor(
 
         refreshCatalog()
         val storageManager = context.getSystemService(StorageManager::class.java)
-        // Removable-volume mount/eject is the only refresh signal we need: the catalog is now
-        // read directly off the filesystem, not off MediaStore, so there is no indexing delay to
-        // wait out and no MediaStore change event to observe.
-        val callback = object : StorageManager.StorageVolumeCallback() {
+        val volumeCallback = object : StorageManager.StorageVolumeCallback() {
             override fun onStateChanged(volume: StorageVolume) {
                 Log.i(TAG, "Storage changed: state=${volume.state}; refreshing catalog")
                 refreshCatalog()
             }
         }
-        storageManager.registerStorageVolumeCallback(context.mainExecutor, callback)
+        storageManager.registerStorageVolumeCallback(context.mainExecutor, volumeCallback)
+
+        // StorageVolumeCallback.onStateChanged does not fire for USB mount/eject on this hardware
+        // (confirmed on-device: the initial scan runs, but nothing follows on attach/detach), so the
+        // legacy media-mount broadcasts are registered as a second, independent trigger for the same
+        // refresh rather than the only signal this depends on.
+        val mediaMountReceiver = object : BroadcastReceiver() {
+            override fun onReceive(receivedContext: Context, intent: Intent) {
+                Log.i(TAG, "Media broadcast: action=${intent.action}, data=${intent.data}; refreshing catalog")
+                refreshCatalog()
+            }
+        }
+        val mediaMountFilter = IntentFilter().apply {
+            addAction(Intent.ACTION_MEDIA_MOUNTED)
+            addAction(Intent.ACTION_MEDIA_UNMOUNTED)
+            addAction(Intent.ACTION_MEDIA_EJECT)
+            addAction(Intent.ACTION_MEDIA_REMOVED)
+            addAction(Intent.ACTION_MEDIA_BAD_REMOVAL)
+            addDataScheme("file")
+        }
+        ContextCompat.registerReceiver(
+            context,
+            mediaMountReceiver,
+            mediaMountFilter,
+            ContextCompat.RECEIVER_EXPORTED
+        )
+
         awaitClose {
-            storageManager.unregisterStorageVolumeCallback(callback)
+            storageManager.unregisterStorageVolumeCallback(volumeCallback)
+            context.unregisterReceiver(mediaMountReceiver)
         }
     }
 

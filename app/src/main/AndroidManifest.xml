@@ -7,6 +7,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- Direct File access to a removable USB/SD volume the app doesn't own requires this on
+         Android 11+; MediaStore-based scanning proved unreliable for USB video on this hardware. -->
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
 
     <uses-feature
         android:name="android.hardware.type.automotive"
@@ -16,7 +19,7 @@
         android:name="com.ivi.app.IVIApplication"
         android:theme="@style/AppTheme"
         android:label="@string/app_name"
-        android:icon="@drawable/ico_general_media_s"
+        android:icon="@drawable/ico_media_play_l_s"
         android:resizeableActivity="true"
         android:supportsRtl="true">
 

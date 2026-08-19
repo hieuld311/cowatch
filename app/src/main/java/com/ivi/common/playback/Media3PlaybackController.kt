@@ -45,6 +45,7 @@ import kotlinx.coroutines.launch
 
 private const val MEDIA_SESSION_ARTWORK_QUALITY = 78
 private const val MAX_MEDIA_SESSION_ARTWORK_BYTES = 128 * 1024
+private const val PREVIOUS_BUTTON_RESTART_THRESHOLD_MS = 3_000L
 
 @Singleton
 class Media3PlaybackController @Inject constructor(
@@ -168,6 +169,19 @@ class Media3PlaybackController @Inject constructor(
 
     fun setSharedMode(enabled: Boolean) {
         sharedMode = enabled
+    }
+
+    /**
+     * YouTube-style previous-button behavior: past [PREVIOUS_BUTTON_RESTART_THRESHOLD_MS] into the
+     * current video, restart it from 0:00 instead of skipping to the previous one in the catalog.
+     * Returns the video the caller should switch to, or null if this call only restarted playback.
+     */
+    fun handlePreviousButtonPress(navigator: VideoCatalogNavigator): VideoSource.Asset? {
+        if (exoPlayer.safeCurrentPositionMs > PREVIOUS_BUTTON_RESTART_THRESHOLD_MS) {
+            exoPlayer.seekTo(0)
+            return null
+        }
+        return navigator.previous(currentSource)
     }
 
     /** Releases Rear media resources while preserving the process-level player and MediaSession. */

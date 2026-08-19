@@ -138,7 +138,7 @@ class FrontPlayerActivity : ComponentActivity() {
     }
 
     private fun showPreviousVideo() {
-        videoCatalogNavigator.previous(playbackController.currentSource)?.let(::continuePlayback)
+        playbackController.handlePreviousButtonPress(videoCatalogNavigator)?.let(::continuePlayback)
     }
 
     private fun showNextVideo() {

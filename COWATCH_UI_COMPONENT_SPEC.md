@@ -1,6 +1,6 @@
 # CoWatch UI component and typography inventory
 
-> Source snapshot: `extended` worktree, 2026-08-10. This is a source inventory, not a rendered-device specification. Pixel (`px`) values converted with `LocalDensity.toDp()` are density-dependent at runtime; they are intentionally retained as `px` below.
+> Source snapshot: `extended` worktree, 2026-08-24. This is a source inventory, not a rendered-device specification. Pixel (`px`) values converted with `LocalDensity.toDp()` are density-dependent at runtime; they are intentionally retained as `px` below. Newer player/library dimensions recorded below (title/close/timeline/transport sizing, PID-specific overrides, status-bar behavior) are `.dp`/`.sp` literals passed directly to Compose, not `px` conversions.
 
 ## 1. Scope and screen ownership
 
@@ -31,7 +31,16 @@ Excluded: Android permission dialogs, Android status/navigation bars, Toast rend
 | `labelMedium` | Monospace | Medium | 12sp / 16sp | Seek-preview timestamp |
 | `labelSmall` | Monospace | Medium | 11sp / 16sp | Playback elapsed/total time |
 
-No visible Compose text uses a literal `fontSize`; all visible Compose text resolves through the tokens above.
+Most visible Compose text resolves through the tokens above unchanged. Five call sites now override `fontSize` on top of a `MaterialTheme.typography` style (kept for line-height/weight) rather than defining a new token:
+
+| Location | Base style | Literal `fontSize` override |
+|---|---|---|
+| Player title (`PlaybackControlBar`, shared by CID/PID/Rear local player) | `headlineSmall` | `44.sp` |
+| Player elapsed/total time (`PlaybackControlBar.ControlTime`, shared) | `labelSmall` | `22.sp` |
+| CID/PID/Rear focused library title | `headlineSmall` | `44.sp` |
+| PID/Rear unfocused rail-card title | `bodySmall` | `32.sp` |
+
+`ReadOnlyPlaybackControlBar`'s title (Rear's passive shared-playback overlay) is a separate, unmodified implementation and still renders at the token's default `headlineSmall` 24sp — see §10.
 
 ## 3. Text-color tokens
 
@@ -39,9 +48,10 @@ No visible Compose text uses a literal `fontSize`; all visible Compose text reso
 
 | Semantic token | Dark mode | Light mode | Visible text using it |
 |---|---:|---:|---|
-| `contentPrimary` | `#E6EDF3` | `#17212B` | Player title, seek preview time, dialog heading, unfocused PID/Rear card title |
+| `contentPrimary` | `#E6EDF3` | `#17212B` | Seek preview time, dialog heading, `ReadOnlyPlaybackControlBar` title (Rear passive overlay only, §10), unfocused PID/Rear card title |
 | `contentPrimary` at 70% alpha | `#E6EDF3B3` | `#17212BB3` | Playback elapsed and total time |
 | `libraryTitle` | `#FFFFFFFF` | `#17212B` | CID/PID/Rear focused-video title |
+| Literal `Color.White` (not a theme token, same in both modes) | `#FFFFFFFF` | `#FFFFFFFF` | `PlaybackControlBar` player title (CID/PID/Rear local player, via `titleColor` default) |
 | `dialogAccent` | `#00F9EC` | `#00A86B` | Selected PID display row; Rear broadcast video title |
 | `dialogNormalText` | `#C7CADA` | `#3F4A55` | Unselected PID display row; Rear countdown |
 | `dialogDisabledText` | `#838497` | `#77808A` | Disabled PID target row; no-secondary-display message; disabled Broadcast action |
@@ -59,7 +69,7 @@ All other apparent text-like marks are bitmap icons: speed (`1X`, `1.5X`, `2X`),
 | `PrimaryPlaybackButton` | Default 124dp square; default glyph 50dp; actual click target is glyph area | `img_button_play_background_[n/p/d]`, play/pause icon assets | Asset-defined | No visible text; a11y: `Play video` or `Pause video` |
 | `PressStateIconButton` | Default 124dp layout; default icon/click target 40dp | Normal/pressed/disabled icon assets; 90ms crossfade, 0.98 press scale | Asset-defined | No visible text; a11y supplied per use |
 | Library PiP | Caller-owned video rectangle; center play; Expand and Close at lower corners, 40dp icon/layout with 12dp inset | Video surface plus common icon assets | No shape declared | No visible text; a11y: `Expand player`, `Close PiP player` |
-| Player close | 64dp layout, 40dp glyph, top-right 12dp inset | `ico_general_close_[n/p]` | Asset-defined | No visible text; a11y: `Close player` |
+| Player close | 72dp hit box, 52dp click-target layout, 40dp glyph (unchanged); box inset top 77dp / end 48dp; 10dp padding between box and click-target; `PlayerScreenFrame` params, shared default for CID/PID/Rear | `ico_general_close_[n/p]` | Asset-defined | No visible text; a11y: `Close player` |
 
 ## 5. CID Library
 
@@ -71,7 +81,7 @@ Source: `app/src/cid/java/com/ivi/cid/ui/library/VideoLibraryScreen.kt` and `Ver
 | Vertical focused card | `604px × 304px`; left-aligned in rail | Dynamic thumbnail | 8dp; 1dp `focusedVideoOutline` (`#05F0EC` dark / `#00A86B` light) | None |
 | Vertical side cards | `398px × 224px`; interpolated while dragging | Dynamic thumbnail | 8dp; no border | None |
 | Focused-card play | Bottom-start, offset `x=20dp`, `y=-20dp` | Shared primary play control | Bitmap-defined | None |
-| Focused-video title | Bottom-end; `end=28dp`, `bottom=36dp`; max 2 lines | `libraryTitle` | None | Dynamic `video.title`; `headlineSmall`, 24sp bold |
+| Focused-video title | Bottom-end; `end=28dp`, `bottom=36dp`; max 2 lines | `libraryTitle` | None | Dynamic `video.title`; `headlineSmall` style with literal `fontSize = 44.sp` override, bold |
 | In-app PiP | Top-end; `top=56dp`, `end=28dp`; `398px × 224px` | Live `CIDPlayerSurface` and shared PiP controls | Surface shape not declared | No visible text |
 
 CID Library intentionally does not render titles for side cards.
@@ -83,9 +93,9 @@ Source: `app/src/main/java/com/ivi/common/ui/pidlibrary/VideoLibraryScreen.kt`, 
 | Component | Dimensions / placement | Colors / assets | Bo góc / border | Visible text |
 |---|---|---|---|---|
 | Screen background | Full screen | `ExplorerBackground`; overlay asset `img_passenger_launcher_background` | None | None |
-| Focused-video title | Above rail; horizontal padding `55px` converted to dp; bottom 12dp; one line | `libraryTitle` | None | Dynamic `video.title`; `headlineSmall`, 24sp bold |
+| Focused-video title | Above rail; horizontal padding `55px` converted to dp; bottom 12dp; one line | `libraryTitle` | None | Dynamic `video.title`; `headlineSmall` style with literal `fontSize = 44.sp` override, bold |
 | Horizontal focused card | `604px × 340px`; rail top padding 12dp | Dynamic thumbnail | 8dp; 1dp `focusedVideoOutline` when focused | None |
-| Horizontal side card | `396px × 223px`; 16dp card gap | Dynamic thumbnail | 8dp; no border | Dynamic `video.title`; `contentPrimary`; `bodySmall`, 12sp bold; top inset 8dp; max one line |
+| Horizontal side card | `396px × 223px`; 16dp card gap | Dynamic thumbnail | 8dp; no border | Dynamic `video.title`; `contentPrimary`; `bodySmall` style with literal `fontSize = 32.sp` override, bold; top inset 8dp; max one line |
 | Focused-card play | Bottom-start inside selected card | Shared primary play control | Bitmap-defined | None |
 | Rail gesture / motion | Horizontal drag; 320ms focus settle | N/A | N/A | None |
 | Rail progress | Bottom of screen; side insets `55px`; height 6dp; 420ms animation | `img_general_progress_bar_track` + `img_general_progress_bar_filled_track` | Asset-defined | None |
@@ -97,18 +107,20 @@ Rear Left and Rear Right use this exact Library UI source. PID supplies its fano
 
 Source: `app/src/main/java/com/ivi/common/ui/player/PlayerScreenFrame.kt`, `PlaybackControlBar.kt`, `VideoSeekBar.kt`, and `SeekFramePreview.kt`.
 
+`PlaybackControlBar` and `PlayerScreenFrame` expose the sizing below as parameters with shared defaults; CID and Rear's local player use every default unmodified, PID overrides `controlBarHeight`, `transportSlotSize` and `transportIconSize` only (see §9). CID's `HostPlaybackControls` now also passes `showVideoTitle = true`, so all three flavors' local player shows the title (it previously did not for CID).
+
 | Component | Dimensions / placement | Colors / assets | Bo góc / border | Visible text |
 |---|---|---|---|---|
 | Player frame | Full screen, video beneath overlays | `playerCanvas`: `#000000` in both modes | None | None |
-| Close control | Top-end, 12dp inset; 64dp layout / 40dp glyph | Common close assets | Asset-defined | None |
-| Control-bar container | Bottom; total height 154dp; background layer height 134dp | CID/Rear: `img_media_control_background`; PID: `img_media_passenger_control_background` | Asset-defined | None |
-| Timeline overlay | At top of control-bar container; height 48dp | Track/filled-track assets | Asset-defined | None |
+| Close control | `PlayerScreenFrame` params, shared default: 72dp hit box, top-end inset `top=77dp` `end=48dp`; 10dp padding between box and the 52dp click-target layout; 40dp glyph (unchanged) | Common close assets | Asset-defined | None |
+| Control-bar container | Bottom; CID/Rear default `controlBarHeight = 154dp`; PID `controlBarHeight = 210dp`. Background layer height is derived as `controlBarHeight - 20dp` (coerced to at least the original 134dp), so CID/Rear stay at 134dp and PID's background grows to 190dp | CID/Rear: `img_media_control_background`; PID: `img_media_passenger_control_background` | Asset-defined | None |
+| Timeline | `PlaybackTimeline` is a `Column`: the seek bar (40dp) stacks above the elapsed/total time `Row`, so the time row's `top` padding is measured from the seek bar's bottom edge, not the timeline's own top | Track/filled-track assets | Asset-defined | None |
 | Seek track | Visual height 40dp; track 6dp | `img_general_progress_bar_track`, `img_general_progress_bar_filled_track` | Asset-defined | None |
 | Seek handle | 40dp | `img_general_slider_handle_[n/p]` | Asset-defined | None |
 | Seek interaction strip | 16dp high, centered on track | Transparent interaction area | None | None |
-| Transport layout | Fixed 124dp slots; center Play stays geometrically centered; non-primary glyphs 40dp | Speed, previous, next and collapse bitmap assets | Asset-defined | No visible text. Tap Previous/Next selects the adjacent catalog video (circular). Hold Previous simulates reverse at 2x with timed seeks; hold Next plays at 2x. Releasing either restores prior speed and play/pause state. |
-| Elapsed / total time | Timeline bottom; horizontal inset 28dp, bottom 6dp; 52dp text width each | `contentPrimary` at 70% alpha | None | Dynamic `HH:MM` / `HH:MM:SS`; `labelSmall`, 11sp |
-| Player video title | Only when `showVideoTitle=true`; top-start; all-side 80dp padding; one line | `contentPrimary` | None | Dynamic media title; `headlineSmall`, 24sp bold |
+| Transport layout | `transportSlotSize`/`transportIconSize` params. CID/Rear default: 136dp slots, 48dp non-primary glyphs (up from the original 124dp/40dp). PID: 172dp slots, 64dp glyphs. `PrimaryPlaybackButton`'s visible background art scales 1:1 with the slot size (its own 50dp inner play/pause glyph is unchanged in all variants) | Speed, previous, next and collapse bitmap assets | Asset-defined | No visible text. Tap Previous/Next selects the adjacent catalog video (circular). Hold Previous simulates reverse at 2x with timed seeks; hold Next plays at 2x. Releasing either restores prior speed and play/pause state. |
+| Elapsed / total time | Below the seek bar; `Row` padding `start=32dp` `end=32dp` `top=15dp`; 100dp text width each (up from 52dp, needed once the font grew) | `contentPrimary` at 70% alpha | None | Dynamic `HH:MM` / `HH:MM:SS`; `labelSmall` style with literal `fontSize = 22.sp` override (up from 11sp) |
+| Player video title | `PlaybackControlBar` params, shared default: box padding `top=75dp` `start=48dp`; background `Color.Black` at 10% alpha, 4dp corner radius; inner content padding 16dp horizontal / 12dp vertical; one line | Literal `Color.White` text (not a theme token) on the translucent box | Box: 4dp | Dynamic media title; `headlineSmall` style with literal `fontSize = 44.sp` override (up from 24sp, no box, `contentPrimary`) |
 | Seek-frame preview | 240dp × 135dp when frame exists; 88dp × 44dp fallback; above controls | Black `playerCanvas`; 1dp `seekPreviewOutline` (white 70%); timestamp scrim `playerScrim` (black 68%) | Preview 8dp; timestamp 4dp | Dynamic time; `contentPrimary`; `labelMedium`, 12sp |
 
 Common transport a11y labels: `Playback speed 1X`, `Playback speed 1.5X`, `Playback speed 2X`, `Previous video`, `Next video`, `Collapse player`, `Play video`, `Pause video`, and `Close player`.
@@ -120,7 +132,7 @@ Source: `app/src/cid/java/com/ivi/cid/ui/player/FrontPlayerScreen.kt`.
 | Component | Behavior / visual delta from common player |
 |---|---|
 | Video surface | Local `CIDPlayerSurface` / Media3 `PlayerView` |
-| Playback controls | Common `PlaybackControlBar`; no player title (`showVideoTitle=false`); no broadcast control |
+| Playback controls | Common `PlaybackControlBar`; player title visible (`showVideoTitle=true`); no broadcast control; all shared §7 defaults (154dp bar, 136dp/48dp transport) |
 | Screen mode | Immersive fullscreen |
 | System text | Toast `Select a video first` when launched without a valid video; styling is Android system-controlled |
 
@@ -131,7 +143,7 @@ Source: `app/src/pid/java/com/ivi/pid/ui/player/FrontPlayerScreen.kt`, `HostPlay
 | Component | Dimensions / placement | Colors / assets | Bo góc / border | Visible text |
 |---|---|---|---|---|
 | Video surface | Full screen PID fanout output | Video content | None | None |
-| Playback controls | Common bar with `img_media_passenger_control_background`; player title visible | Common controls | Asset-defined | Dynamic media title; `headlineSmall`, 24sp bold |
+| Playback controls | Common bar with `img_media_passenger_control_background`; player title visible; PID overrides `controlBarHeight=210dp` (background 190dp), `transportSlotSize=172dp`, `transportIconSize=64dp` — all taller/larger than the CID/Rear 154dp/136dp/48dp default (§7) | Common controls | Asset-defined | Dynamic media title; §7 shared title styling (white, translucent box, 44sp) |
 | Broadcast icon | Extra leading slot; 40dp clickable/glyph | `ico_media_boardcast_n/p/s`; 90ms crossfade; 0.98 press scale | `CircleShape` clip | No visible text; a11y `Broadcast` |
 | Host broadcast notification | Top-center; top 10dp; horizontal 28dp / vertical 8dp padding | `broadcastNotificationSurface`: `#25364A` dark / `#E0F2E9` light; text token in section 3 | 4dp | Dynamic coordinator notification; `labelLarge`, 14sp |
 | System text | Android Toast | System-controlled | System-controlled | `Select a video first`; `No rear screen available` |
@@ -155,8 +167,8 @@ Source: `app/src/rear/java/com/ivi/rear/ui/FrontPlayerActivity.kt`.
 
 | Mode | Components | Text / interaction |
 |---|---|---|
-| Local player | Local Media3 surface; common playback bar with title enabled; common close; PiP action | Dynamic title uses `contentPrimary` / `headlineSmall`. Transport controls are interactive. |
-| Shared player | PID fanout surface; `ReadOnlyPlaybackControlBar`; common close | Dynamic title and time use the same common text tokens and sizes. Timeline is disabled. Speed, previous, play/pause, next and collapse render forced pressed visuals and are non-interactive. A tap on this Rear screen alone shows the overlay for five seconds. |
+| Local player | Local Media3 surface; common `PlaybackControlBar` (all §7 shared defaults: 154dp bar, 136dp/48dp transport) with title enabled; common close; PiP action | Dynamic title uses the shared player-title styling (§7): literal `Color.White`, `headlineSmall` style with `fontSize = 44.sp` override, on a translucent black rounded box. Transport controls are interactive. |
+| Shared player | PID fanout surface; `ReadOnlyPlaybackControlBar` (a separate, unmodified composable — not `PlaybackControlBar`); common close | Title still uses the *original* styling: `contentPrimary`, `headlineSmall` at the token default 24sp, no background box, `80dp` padding on all sides — it was not touched by the §7 changes. Elapsed/total time *is* shared (both bars call the same `PlaybackTimeline`/`ControlTime`), so it picked up the §7 changes: 22sp, positioned below the seek bar with `top=15dp`. Timeline is disabled. Speed, previous, play/pause, next and collapse render forced pressed visuals and are non-interactive. A tap on this Rear screen alone shows the overlay for five seconds. |
 | Invalid launch | Android Toast | `Select a video first`; Android system styling. |
 
 ## 11. Rear receiver dialog
@@ -181,11 +193,25 @@ Source: `app/src/rear/java/com/ivi/rear/ui/ReceiverBroadcastDialog.kt`. It can a
 | Seek preview image | `Seek preview` | Image content description only |
 | PiP/Player/Transport controls | Labels listed in sections 4 and 7 | Image content descriptions only |
 
-## 13. Source references
+## 13. Status bar and navigation bar behavior
+
+Source: `app/src/main/java/com/ivi/common/ui/PlayerImmersiveFullscreen.kt` (player only). The previous `ImmersiveFullscreen.kt` held two functions (`enterImmersiveFullscreen` and `showTransparentLibraryStatusBar`) shared between library and player; it was deleted and the file that replaced it holds only the player function, since library no longer touches window insets at all.
+
+| Screen | Behavior | Mechanism |
+|---|---|---|
+| CID / PID / Rear library (`VideoLibraryActivity`) | Does **not** overlay the status or navigation bar. Content lays out below/above system bars using default window-inset handling. | No window/`Window` call at all — `showTransparentLibraryStatusBar()` was removed from all three library activities' `onCreate`, and the function itself was deleted. |
+| CID / PID / Rear player (`FrontPlayerActivity`) | Fullscreen by design: requests immersive mode, hiding system bars and letting content draw edge-to-edge. Bars can be swiped back in transiently. | `window.enterImmersiveFullscreen()` — `WindowCompat.setDecorFitsSystemWindows(window, false)` + `WindowInsetsControllerCompat.hide(WindowInsetsCompat.Type.systemBars())` with `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE`. Called from `onCreate`, `onResume`, and re-asserted in `onWindowFocusChanged` when focus returns. |
+
+Rear's `ReceiverConsentActivity` (cold-start consent, §8 of the architecture report) never called either function and is unaffected by this change.
+
+On the project's Android 15 Automotive emulator, the status bar remained visible in the player screen even with `hide(systemBars())` requested — AAOS commonly pins system bars to always-visible for driver-safety policy, which can override an app's hide request. The `setDecorFitsSystemWindows(false)` / edge-to-edge intent is still correctly requested at the app level; whether the bar visually disappears depends on the target device's OEM/AAOS system-bar policy.
+
+## 14. Source references
 
 - Theme, semantic colors and typography: `app/src/main/java/com/ivi/common/ui/CoWatchTheme.kt`
 - Shared library primitives: `app/src/main/java/com/ivi/common/ui/library/` and `app/src/main/java/com/ivi/common/ui/pidlibrary/`
 - Shared player primitives: `app/src/main/java/com/ivi/common/ui/player/`
+- Player fullscreen behavior: `app/src/main/java/com/ivi/common/ui/PlayerImmersiveFullscreen.kt`
 - CID-specific Library/Player: `app/src/cid/java/com/ivi/cid/ui/`
 - PID-specific Player/Dialog: `app/src/pid/java/com/ivi/pid/ui/`
 - Rear Player/receiver dialog: `app/src/rear/java/com/ivi/rear/ui/`

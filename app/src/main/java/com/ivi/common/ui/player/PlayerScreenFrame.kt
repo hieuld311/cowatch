@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.ivi.R
 import com.ivi.common.ui.PressStateIconButton
@@ -19,6 +21,12 @@ import com.ivi.common.ui.coWatchColorScheme
 public fun PlayerScreenFrame(
     onCloseClick: () -> Unit,
     modifier: Modifier = Modifier,
+    closeBoxSize: Dp = 72.dp,
+    closePaddingTop: Dp = 77.dp,
+    closePaddingEnd: Dp = 48.dp,
+    closeBoxContentPadding: Dp = 10.dp,
+    closeLayoutSize: Dp = 52.dp,
+    closeIconSize: Dp = 40.dp,
     videoSurface: @Composable BoxScope.() -> Unit,
     playbackControls: @Composable BoxScope.() -> Unit,
     overlays: @Composable BoxScope.() -> Unit = {}
@@ -30,17 +38,23 @@ public fun PlayerScreenFrame(
     ) {
         videoSurface()
         playbackControls()
-        PressStateIconButton(
-            normalDrawable = R.drawable.ico_general_close_n,
-            pressedDrawable = R.drawable.ico_general_close_p,
-            contentDescription = "Close player",
-            onClick = onCloseClick,
+        Box(
             modifier = Modifier
                 .align(Alignment.TopEnd)
-                .padding(12.dp),
-            layoutSize = 64.dp,
-            iconSize = 40.dp
-        )
+                .padding(top = closePaddingTop, end = closePaddingEnd)
+                .size(closeBoxSize)
+                .padding(closeBoxContentPadding),
+            contentAlignment = Alignment.Center
+        ) {
+            PressStateIconButton(
+                normalDrawable = R.drawable.ico_general_close_n,
+                pressedDrawable = R.drawable.ico_general_close_p,
+                contentDescription = "Close player",
+                onClick = onCloseClick,
+                layoutSize = closeLayoutSize,
+                iconSize = closeIconSize
+            )
+        }
         overlays()
     }
 }

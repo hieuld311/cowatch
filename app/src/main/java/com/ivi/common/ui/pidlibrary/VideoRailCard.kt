@@ -22,6 +22,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.ivi.common.domain.AssetVideo
 import com.ivi.common.media.ThumbnailLoader
 import com.ivi.common.ui.PrimaryPlaybackButton
@@ -91,6 +92,7 @@ public fun VideoRailCard(
                 modifier = Modifier.padding(top = 8.dp),
                 color = MaterialTheme.coWatchColorScheme.contentPrimary,
                 style = MaterialTheme.typography.bodySmall,
+                fontSize = 32.sp,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )

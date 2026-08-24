@@ -4,17 +4,21 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.annotation.DrawableRes
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -25,11 +29,15 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.paint
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import androidx.media3.common.Player
 import com.ivi.R
@@ -43,11 +51,12 @@ public const val PLAYBACK_CONTROL_BAR_HEIGHT_DP = 154
 
 private const val CONTROLS_AUTO_HIDE_DELAY_MS = 5_000L
 private val CONTROL_BAR_BACKGROUND_HEIGHT = 134.dp
-private val CONTROL_BAR_HEIGHT = PLAYBACK_CONTROL_BAR_HEIGHT_DP.dp
-private val TIMELINE_HEIGHT = 48.dp
-private val TRANSPORT_ICON_SIZE = 40.dp
-private val TRANSPORT_SLOT_SIZE = 124.dp
+private val DEFAULT_CONTROL_BAR_HEIGHT = PLAYBACK_CONTROL_BAR_HEIGHT_DP.dp
+private val TRANSPORT_ICON_SIZE = 48.dp
+private val TRANSPORT_SLOT_SIZE = 136.dp
+private val CONTROL_BAR_BACKGROUND_TOP_GAP = 20.dp
 private val PREVIEW_OVERLAY_HEIGHT = 135.dp
+private val TITLE_BACKGROUND_COLOR = Color.Black.copy(alpha = 0.1f)
 
 @Composable
 public fun PlaybackControlBar(
@@ -59,6 +68,16 @@ public fun PlaybackControlBar(
     onNextVideo: () -> Unit,
     modifier: Modifier = Modifier,
     showVideoTitle: Boolean = false,
+    titlePaddingTop: Dp = 75.dp,
+    titlePaddingStart: Dp = 48.dp,
+    titleColor: Color = Color.White,
+    titleBackgroundColor: Color = TITLE_BACKGROUND_COLOR,
+    titleCornerRadius: Dp = 4.dp,
+    titleContentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+    titleFontSize: TextUnit = 44.sp,
+    controlBarHeight: Dp = DEFAULT_CONTROL_BAR_HEIGHT,
+    transportSlotSize: Dp = TRANSPORT_SLOT_SIZE,
+    transportIconSize: Dp = TRANSPORT_ICON_SIZE,
     controlsEnabled: Boolean = true,
     @DrawableRes controlBackgroundDrawable: Int = R.drawable.img_media_control_background,
     leadingControl: (@Composable (onInteraction: () -> Unit) -> Unit)? = null,
@@ -148,7 +167,7 @@ public fun PlaybackControlBar(
                 durationMs = controlsState.durationMs,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(bottom = CONTROL_BAR_HEIGHT + 12.dp)
+                    .padding(bottom = controlBarHeight + 12.dp)
                     .fillMaxWidth()
                     .height(PREVIEW_OVERLAY_HEIGHT)
             )
@@ -161,14 +180,21 @@ public fun PlaybackControlBar(
                 exit = fadeOut(),
                 modifier = Modifier.align(Alignment.TopStart)
             ) {
-                Text(
-                    text = controlsState.videoTitle,
-                    modifier = Modifier.padding(80.dp),
-                    color = MaterialTheme.coWatchColorScheme.contentPrimary,
-                    style = MaterialTheme.typography.headlineSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Box(
+                    modifier = Modifier
+                        .padding(top = titlePaddingTop, start = titlePaddingStart)
+                        .background(titleBackgroundColor, RoundedCornerShape(titleCornerRadius))
+                        .padding(titleContentPadding)
+                ) {
+                    Text(
+                        text = controlsState.videoTitle,
+                        color = titleColor,
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontSize = titleFontSize,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
 
@@ -183,10 +209,12 @@ public fun PlaybackControlBar(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(CONTROL_BAR_HEIGHT)
+                    .height(controlBarHeight)
             ) {
                 ControlBarBackground(
                     backgroundDrawable = controlBackgroundDrawable,
+                    height = (controlBarHeight - CONTROL_BAR_BACKGROUND_TOP_GAP)
+                        .coerceAtLeast(CONTROL_BAR_BACKGROUND_HEIGHT),
                     modifier = Modifier.align(Alignment.BottomCenter)
                 ) {
                     TransportControls(
@@ -197,6 +225,8 @@ public fun PlaybackControlBar(
                         leadingControl = leadingControl,
                         trailingControl = trailingControl,
                         controlsEnabled = controlsEnabled,
+                        slotSize = transportSlotSize,
+                        iconSize = transportIconSize,
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
@@ -251,7 +281,7 @@ public fun ReadOnlyPlaybackControlBar(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(CONTROL_BAR_HEIGHT)
+                    .height(DEFAULT_CONTROL_BAR_HEIGHT)
             ) {
                 ControlBarBackground(
                     modifier = Modifier.align(Alignment.BottomCenter)
@@ -274,13 +304,14 @@ public fun ReadOnlyPlaybackControlBar(
 @Composable
 private fun ControlBarBackground(
     @DrawableRes backgroundDrawable: Int = R.drawable.img_media_control_background,
+    height: Dp = CONTROL_BAR_BACKGROUND_HEIGHT,
     modifier: Modifier = Modifier,
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit = {}
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(CONTROL_BAR_BACKGROUND_HEIGHT)
+            .height(height)
             .paint(
                 painter = painterResource(backgroundDrawable),
                 contentScale = ContentScale.FillBounds
@@ -298,10 +329,9 @@ private fun PlaybackTimeline(
     onSeekFinished: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(TIMELINE_HEIGHT)
     ) {
         VideoSeekBar(
             positionMs = positionMs,
@@ -310,16 +340,13 @@ private fun PlaybackTimeline(
             onSeekFinished = onSeekFinished,
             enabled = enabled,
             modifier = Modifier
-                .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(SEEK_BAR_VISUAL_HEIGHT)
         )
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .align(Alignment.BottomCenter)
-                .padding(horizontal = 28.dp)
-                .padding(bottom = 6.dp),
+                .padding(start = 32.dp, end = 32.dp, top = 15.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -341,13 +368,16 @@ private fun TransportControls(
     leadingControl: (@Composable (onInteraction: () -> Unit) -> Unit)?,
     trailingControl: (@Composable () -> Unit)?,
     controlsEnabled: Boolean,
+    slotSize: Dp = TRANSPORT_SLOT_SIZE,
+    iconSize: Dp = TRANSPORT_ICON_SIZE,
     modifier: Modifier = Modifier
 ) {
     TransportControlsLayout(
         modifier = modifier,
+        slotSize = slotSize,
         leftControls = {
             if (leadingControl != null) {
-                TransportControlSlot {
+                TransportControlSlot(slotSize = slotSize) {
                     leadingControl(controlsState::showControls)
                 }
             }
@@ -356,8 +386,8 @@ private fun TransportControls(
                 normalDrawable = speed.iconResId,
                 pressedDrawable = speed.pressedIconResId,
                 contentDescription = "Playback speed ${speed.label}",
-                layoutSize = TRANSPORT_SLOT_SIZE,
-                iconSize = TRANSPORT_ICON_SIZE,
+                layoutSize = slotSize,
+                iconSize = iconSize,
                 onClick = controlsState::cyclePlaybackSpeed,
                 enabled = controlsEnabled
             )
@@ -365,8 +395,8 @@ private fun TransportControls(
                 normalDrawable = R.drawable.ico_media_prev_n,
                 pressedDrawable = R.drawable.ico_media_prev_p,
                 contentDescription = "Previous video",
-                layoutSize = TRANSPORT_SLOT_SIZE,
-                iconSize = TRANSPORT_ICON_SIZE,
+                layoutSize = slotSize,
+                iconSize = iconSize,
                 onClick = onPreviousVideo,
                 enabled = controlsEnabled,
                 onLongPressStart = controlsState::beginRewind,
@@ -377,7 +407,7 @@ private fun TransportControls(
             PrimaryPlaybackButton(
             isPlaying = controlsState.isPlaying,
             onClick = controlsState::togglePlayback,
-            buttonSize = TRANSPORT_SLOT_SIZE,
+            buttonSize = slotSize,
             enabled = controlsEnabled
             )
         },
@@ -386,8 +416,8 @@ private fun TransportControls(
                 normalDrawable = R.drawable.ico_media_next_n,
                 pressedDrawable = R.drawable.ico_media_next_p,
                 contentDescription = "Next video",
-                layoutSize = TRANSPORT_SLOT_SIZE,
-                iconSize = TRANSPORT_ICON_SIZE,
+                layoutSize = slotSize,
+                iconSize = iconSize,
                 onClick = onNextVideo,
                 enabled = controlsEnabled,
                 onLongPressStart = controlsState::beginFastForward,
@@ -397,8 +427,8 @@ private fun TransportControls(
                 normalDrawable = R.drawable.ico_media_collapse_n,
                 pressedDrawable = R.drawable.ico_media_collapse_p,
                 contentDescription = "Collapse player",
-                layoutSize = TRANSPORT_SLOT_SIZE,
-                iconSize = TRANSPORT_ICON_SIZE,
+                layoutSize = slotSize,
+                iconSize = iconSize,
                 onClick = {
                     controlsState.showControls()
                     onPictureInPictureClick()
@@ -406,7 +436,7 @@ private fun TransportControls(
                 enabled = controlsEnabled
             )
             if (trailingControl != null) {
-                TransportControlSlot {
+                TransportControlSlot(slotSize = slotSize) {
                     trailingControl()
                 }
             }
@@ -419,18 +449,19 @@ private fun TransportControlsLayout(
     leftControls: @Composable RowScope.() -> Unit,
     centerControl: @Composable () -> Unit,
     rightControls: @Composable RowScope.() -> Unit,
+    slotSize: Dp = TRANSPORT_SLOT_SIZE,
     modifier: Modifier = Modifier
 ) {
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(TRANSPORT_SLOT_SIZE)
+            .height(slotSize)
     ) {
         Row(
             modifier = Modifier
                 .align(Alignment.CenterStart)
                 .fillMaxWidth(0.5f)
-                .padding(end = TRANSPORT_SLOT_SIZE / 2),
+                .padding(end = slotSize / 2),
             horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
             content = leftControls
@@ -438,7 +469,7 @@ private fun TransportControlsLayout(
         Box(
             modifier = Modifier
                 .align(Alignment.Center)
-                .size(TRANSPORT_SLOT_SIZE),
+                .size(slotSize),
             contentAlignment = Alignment.Center
         ) {
             centerControl()
@@ -447,7 +478,7 @@ private fun TransportControlsLayout(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxWidth(0.5f)
-                .padding(start = TRANSPORT_SLOT_SIZE / 2),
+                .padding(start = slotSize / 2),
             horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically,
             content = rightControls
@@ -457,10 +488,11 @@ private fun TransportControlsLayout(
 
 @Composable
 private fun TransportControlSlot(
+    slotSize: Dp = TRANSPORT_SLOT_SIZE,
     content: @Composable androidx.compose.foundation.layout.BoxScope.() -> Unit
 ) {
     Box(
-        modifier = Modifier.size(TRANSPORT_SLOT_SIZE),
+        modifier = Modifier.size(slotSize),
         contentAlignment = Alignment.Center,
         content = content
     )
@@ -472,7 +504,10 @@ private fun ControlTime(text: String, textAlign: TextAlign = TextAlign.Start) {
         text = text,
         color = MaterialTheme.coWatchColorScheme.contentPrimary.copy(alpha = 0.7f),
         style = MaterialTheme.typography.labelSmall,
+        fontSize = 22.sp,
+        maxLines = 1,
+        overflow = TextOverflow.Visible,
         textAlign = textAlign,
-        modifier = Modifier.width(52.dp)
+        modifier = Modifier.width(100.dp)
     )
 }

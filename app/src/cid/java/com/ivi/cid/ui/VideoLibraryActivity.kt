@@ -13,7 +13,6 @@ import com.ivi.cid.ui.library.VideoLibraryScreen
 import com.ivi.cid.viewmodel.LibraryViewModel
 import com.ivi.common.ui.CoWatchTheme
 import com.ivi.common.ui.requestUsbVideoPermissionIfNeeded
-import com.ivi.common.ui.showTransparentLibraryStatusBar
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -29,7 +28,6 @@ class VideoLibraryActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.showTransparentLibraryStatusBar()
         requestUsbVideoPermissionIfNeeded()
 
         setContent {

@@ -38,6 +38,9 @@ internal fun HostPlaybackControls(
         onNextVideo = onNextVideo,
         modifier = modifier,
         showVideoTitle = true,
+        controlBarHeight = 210.dp,
+        transportSlotSize = 172.dp,
+        transportIconSize = 64.dp,
         controlBackgroundDrawable = R.drawable.img_media_passenger_control_background,
         leadingControl = { onInteraction ->
 

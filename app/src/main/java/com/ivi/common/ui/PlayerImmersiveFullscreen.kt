@@ -1,0 +1,16 @@
+package com.ivi.common.ui
+
+import android.view.Window
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+
+/** Player screens are fullscreen by design and hide the status/navigation bars. */
+fun Window.enterImmersiveFullscreen() {
+    WindowCompat.setDecorFitsSystemWindows(this, false)
+    WindowInsetsControllerCompat(this, decorView).apply {
+        hide(WindowInsetsCompat.Type.systemBars())
+        systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    }
+}

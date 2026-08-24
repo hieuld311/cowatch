@@ -12,7 +12,6 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ivi.common.ui.CoWatchTheme
 import com.ivi.common.ui.requestUsbVideoPermissionIfNeeded
-import com.ivi.common.ui.showTransparentLibraryStatusBar
 import com.ivi.common.ui.pidlibrary.VideoLibraryScreen
 import com.ivi.rear.viewmodel.VideoLibraryViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -23,7 +22,6 @@ class VideoLibraryActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.showTransparentLibraryStatusBar()
         requestUsbVideoPermissionIfNeeded()
         setContent {
             CoWatchTheme {

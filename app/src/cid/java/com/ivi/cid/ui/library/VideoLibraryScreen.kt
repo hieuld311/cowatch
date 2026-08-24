@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.ivi.R
 import com.ivi.common.media.ThumbnailLoader
 import com.ivi.common.domain.AssetVideo
@@ -78,6 +79,7 @@ fun VideoLibraryScreen(
                 modifier = Modifier.align(Alignment.BottomEnd).padding(end = 28.dp, bottom = 36.dp),
                 color = MaterialTheme.coWatchColorScheme.libraryTitle,
                 style = MaterialTheme.typography.headlineSmall,
+                fontSize = 44.sp,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )

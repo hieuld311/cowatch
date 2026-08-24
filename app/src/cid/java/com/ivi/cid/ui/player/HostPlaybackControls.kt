@@ -23,6 +23,7 @@ internal fun HostPlaybackControls(
         onPictureInPictureClick = onPictureInPictureClick,
         onPreviousVideo = onPreviousVideo,
         onNextVideo = onNextVideo,
-        modifier = modifier
+        modifier = modifier,
+        showVideoTitle = true
     )
 }

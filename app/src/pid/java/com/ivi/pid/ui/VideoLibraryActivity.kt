@@ -11,7 +11,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.ivi.common.media.ThumbnailLoader
 import com.ivi.common.ui.CoWatchTheme
 import com.ivi.common.ui.requestUsbVideoPermissionIfNeeded
-import com.ivi.common.ui.showTransparentLibraryStatusBar
 import com.ivi.common.playback.Media3PlaybackController
 import com.ivi.common.ui.pidlibrary.VideoLibraryScreen
 import com.ivi.pid.viewmodel.VideoLibraryViewModel
@@ -36,7 +35,6 @@ class VideoLibraryActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.showTransparentLibraryStatusBar()
         requestUsbVideoPermissionIfNeeded()
 
         setContent {

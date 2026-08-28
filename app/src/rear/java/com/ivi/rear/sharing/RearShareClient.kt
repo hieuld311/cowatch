@@ -21,6 +21,7 @@ import com.ivi.common.playback.LocalPlaybackDestination
 import com.ivi.common.playback.Media3PlaybackController
 import com.ivi.rear.app.RearRole
 import com.ivi.rear.ui.FrontPlayerActivity
+import com.ivi.rear.ui.ReceiverConsentActivity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -246,6 +247,28 @@ class RearShareClient @Inject constructor(
         clearPendingRequest()
         _pendingShareRequest.value = PendingShareRequest(snapshot = snapshot)
         reportState(ReceiverState.AWAITING_RESPONSE, snapshot.sessionId)
+        bringConsentDialogToFront()
+    }
+
+    /**
+     * A registered receiver stays "ready" even after its Activity is pushed behind the launcher
+     * or an app-switcher list, since nothing here unregisters on stop/pause. Without this, a share
+     * request arriving while backgrounded would only update state inside an Activity the user
+     * can't see. Raising the (non-bootstrap) consent dialog here mirrors how launchSharedPlayer
+     * already brings the shared player forward once accepted.
+     */
+    private fun bringConsentDialogToFront() {
+        val actualDisplayId = displayId ?: return
+        val intent = Intent(context, ReceiverConsentActivity::class.java)
+            .addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            )
+        val options = ActivityOptions.makeBasic().setLaunchDisplayId(actualDisplayId)
+        runCatching {
+            context.startActivity(intent, options.toBundle())
+        }.onFailure { Log.w(TAG, "Unable to bring consent dialog to front", it) }
     }
 
     private fun acceptPendingRequestInternal() {

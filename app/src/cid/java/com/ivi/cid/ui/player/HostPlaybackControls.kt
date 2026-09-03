@@ -14,7 +14,8 @@ internal fun HostPlaybackControls(
     onPictureInPictureClick: () -> Unit,
     onPreviousVideo: () -> Unit,
     onNextVideo: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onControlsVisibilityChanged: (Boolean) -> Unit = {}
 ) {
     PlaybackControlBar(
         player = player,
@@ -24,6 +25,7 @@ internal fun HostPlaybackControls(
         onPreviousVideo = onPreviousVideo,
         onNextVideo = onNextVideo,
         modifier = modifier,
-        showVideoTitle = true
+        showVideoTitle = true,
+        onControlsVisibilityChanged = onControlsVisibilityChanged
     )
 }

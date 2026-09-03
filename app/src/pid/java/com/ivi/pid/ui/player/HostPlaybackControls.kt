@@ -27,7 +27,8 @@ internal fun HostPlaybackControls(
     onPictureInPictureClick: () -> Unit,
     onPreviousVideo: () -> Unit,
     onNextVideo: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onControlsVisibilityChanged: (Boolean) -> Unit = {}
 ) {
     PlaybackControlBar(
         player = player,
@@ -41,6 +42,7 @@ internal fun HostPlaybackControls(
         controlBarHeight = 210.dp,
         transportSlotSize = 172.dp,
         transportIconSize = 64.dp,
+        onControlsVisibilityChanged = onControlsVisibilityChanged,
         controlBackgroundDrawable = R.drawable.img_media_passenger_control_background,
         leadingControl = { onInteraction ->
 

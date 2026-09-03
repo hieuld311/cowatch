@@ -1,5 +1,8 @@
 package com.ivi.common.ui.player
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -21,6 +24,7 @@ import com.ivi.common.ui.coWatchColorScheme
 public fun PlayerScreenFrame(
     onCloseClick: () -> Unit,
     modifier: Modifier = Modifier,
+    closeButtonVisible: Boolean = true,
     closeBoxSize: Dp = 72.dp,
     closePaddingTop: Dp = 77.dp,
     closePaddingEnd: Dp = 48.dp,
@@ -38,22 +42,28 @@ public fun PlayerScreenFrame(
     ) {
         videoSurface()
         playbackControls()
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = closePaddingTop, end = closePaddingEnd)
-                .size(closeBoxSize)
-                .padding(closeBoxContentPadding),
-            contentAlignment = Alignment.Center
+        AnimatedVisibility(
+            visible = closeButtonVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.TopEnd)
         ) {
-            PressStateIconButton(
-                normalDrawable = R.drawable.ico_general_close_n,
-                pressedDrawable = R.drawable.ico_general_close_p,
-                contentDescription = "Close player",
-                onClick = onCloseClick,
-                layoutSize = closeLayoutSize,
-                iconSize = closeIconSize
-            )
+            Box(
+                modifier = Modifier
+                    .padding(top = closePaddingTop, end = closePaddingEnd)
+                    .size(closeBoxSize)
+                    .padding(closeBoxContentPadding),
+                contentAlignment = Alignment.Center
+            ) {
+                PressStateIconButton(
+                    normalDrawable = R.drawable.ico_general_close_n,
+                    pressedDrawable = R.drawable.ico_general_close_p,
+                    contentDescription = "Close player",
+                    onClick = onCloseClick,
+                    layoutSize = closeLayoutSize,
+                    iconSize = closeIconSize
+                )
+            }
         }
         overlays()
     }

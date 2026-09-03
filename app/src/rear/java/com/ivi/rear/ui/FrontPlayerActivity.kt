@@ -76,6 +76,7 @@ class FrontPlayerActivity : ComponentActivity() {
                 val shared by shareClient.sharedSession.collectAsStateWithLifecycle()
                 val pendingRequest by shareClient.pendingShareRequest.collectAsStateWithLifecycle()
                 var controlsVisible by remember(shared?.sessionId) { mutableStateOf(false) }
+                var localControlsVisible by remember { mutableStateOf(true) }
                 var interactionVersion by remember(shared?.sessionId) { mutableIntStateOf(0) }
                 var nowMs by remember(shared?.sessionId) {
                     mutableLongStateOf(SystemClock.elapsedRealtime())
@@ -105,6 +106,7 @@ class FrontPlayerActivity : ComponentActivity() {
                         detectTapGestures { interactionVersion += 1 }
                     },
                     onCloseClick = ::closePlayer,
+                    closeButtonVisible = if (shared != null) controlsVisible else localControlsVisible,
                     videoSurface = {
                         if (shared != null) {
                             FanoutVideoSurface(
@@ -139,6 +141,7 @@ class FrontPlayerActivity : ComponentActivity() {
                                 onPreviousVideo = ::showPreviousVideo,
                                 onNextVideo = ::showNextVideo,
                                 showVideoTitle = true,
+                                onControlsVisibilityChanged = { localControlsVisible = it },
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

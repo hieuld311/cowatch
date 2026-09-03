@@ -11,6 +11,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -41,8 +45,11 @@ internal fun FrontPlayerScreen(
     onPreviousVideo: () -> Unit,
     onNextVideo: () -> Unit
 ) {
+    var controlsVisible by remember { mutableStateOf(true) }
+
     PlayerScreenFrame(
         onCloseClick = onBackClick,
+        closeButtonVisible = controlsVisible,
         videoSurface = {
             FanoutVideoSurface(
                 modifier = Modifier.fillMaxSize(),
@@ -70,7 +77,8 @@ internal fun FrontPlayerScreen(
                 onBroadcastCheckedChange = onBroadcastCheckedChange,
                 onPictureInPictureClick = onPictureInPictureClick,
                 onPreviousVideo = onPreviousVideo,
-                onNextVideo = onNextVideo
+                onNextVideo = onNextVideo,
+                onControlsVisibilityChanged = { controlsVisible = it }
             )
         },
         overlays = {

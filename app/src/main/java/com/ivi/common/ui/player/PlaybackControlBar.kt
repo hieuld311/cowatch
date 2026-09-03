@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -28,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.paint
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -55,6 +57,7 @@ private val DEFAULT_CONTROL_BAR_HEIGHT = PLAYBACK_CONTROL_BAR_HEIGHT_DP.dp
 private val TRANSPORT_ICON_SIZE = 48.dp
 private val TRANSPORT_SLOT_SIZE = 136.dp
 private val CONTROL_BAR_BACKGROUND_TOP_GAP = 20.dp
+private val CONTROL_BAR_BACKGROUND_BLUR_RADIUS = 32.dp
 private val PREVIEW_OVERLAY_HEIGHT = 135.dp
 private val TITLE_BACKGROUND_COLOR = Color.Black.copy(alpha = 0.1f)
 
@@ -81,9 +84,14 @@ public fun PlaybackControlBar(
     controlsEnabled: Boolean = true,
     @DrawableRes controlBackgroundDrawable: Int = R.drawable.img_media_control_background,
     leadingControl: (@Composable (onInteraction: () -> Unit) -> Unit)? = null,
-    trailingControl: (@Composable () -> Unit)? = null
+    trailingControl: (@Composable () -> Unit)? = null,
+    onControlsVisibilityChanged: (Boolean) -> Unit = {}
 ) {
     val controlsState = rememberPlaybackControlsState(player)
+
+    LaunchedEffect(controlsState.controlsVisible) {
+        onControlsVisibilityChanged(controlsState.controlsVisible)
+    }
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -312,12 +320,18 @@ private fun ControlBarBackground(
         modifier = modifier
             .fillMaxWidth()
             .height(height)
-            .paint(
-                painter = painterResource(backgroundDrawable),
-                contentScale = ContentScale.FillBounds
-            ),
-        content = content
-    )
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .blur(CONTROL_BAR_BACKGROUND_BLUR_RADIUS)
+                .paint(
+                    painter = painterResource(backgroundDrawable),
+                    contentScale = ContentScale.FillBounds
+                )
+        )
+        content()
+    }
 }
 
 @Composable

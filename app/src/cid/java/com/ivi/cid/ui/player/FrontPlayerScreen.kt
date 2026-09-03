@@ -1,6 +1,10 @@
 package com.ivi.cid.ui.player
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
@@ -21,8 +25,11 @@ internal fun FrontPlayerScreen(
     onPreviousVideo: () -> Unit,
     onNextVideo: () -> Unit
 ) {
+    var controlsVisible by remember { mutableStateOf(true) }
+
     PlayerScreenFrame(
         onCloseClick = onCloseClick,
+        closeButtonVisible = controlsVisible,
         videoSurface = {
             CIDPlayerSurface(
                 modifier = Modifier.matchParentSize(),
@@ -38,6 +45,7 @@ internal fun FrontPlayerScreen(
                 onPictureInPictureClick = onPictureInPictureClick,
                 onPreviousVideo = onPreviousVideo,
                 onNextVideo = onNextVideo,
+                onControlsVisibilityChanged = { controlsVisible = it },
                 modifier = Modifier.matchParentSize()
             )
         }
